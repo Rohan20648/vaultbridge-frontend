@@ -40,10 +40,32 @@ const FounderOnboarding = () => {
   const productFields = useFieldArray({ control, name: "products" });
   const allData = watch();
 
-  const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
+  const next = async () => {
+    // Validate required fields before advancing
+    if (step === 0) {
+      const valid = await handleSubmit(() => {})() !== undefined || !errors.firstName;
+      if (errors.firstName) return;
+    }
+    if (step === 1) {
+      if (!allData.startup.name || !allData.startup.foundedYear) {
+        // trigger validation display
+        await handleSubmit(() => {})();
+        return;
+      }
+    }
+    setStep((s) => Math.min(s + 1, steps.length - 1));
+  };
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
+    if (!allData.startup.name) {
+      toast({ title: "Error", description: "Startup name is required. Please go back to Step 2.", variant: "destructive" });
+      return;
+    }
+    if (!allData.startup.foundedYear) {
+      toast({ title: "Error", description: "Founded year is required. Please go back to Step 2.", variant: "destructive" });
+      return;
+    }
     try {
       setSubmitting(true);
       // 1. Create startup
@@ -156,7 +178,11 @@ const FounderOnboarding = () => {
                 <div className="space-y-5">
                   <h2 className="text-xl font-bold mb-4">Your Startup</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div><label className={labelClass}>Startup Name *</label><input {...register("startup.name", { required: true })} className={inputClass} placeholder="NeuralForge AI" /></div>
+                    <div>
+                      <label className={labelClass}>Startup Name *</label>
+                      <input {...register("startup.name", { required: "Startup name is required" })} className={inputClass} placeholder="NeuralForge AI" />
+                      {errors.startup?.name && <p className="text-destructive text-xs mt-1">{errors.startup.name.message as string}</p>}
+                    </div>
                     <div><label className={labelClass}>Tagline</label><input {...register("startup.tagline")} className={inputClass} placeholder="Enterprise LLM infrastructure" /></div>
                     <div>
                       <label className={labelClass}>Industry</label>
@@ -173,7 +199,11 @@ const FounderOnboarding = () => {
                       </select>
                     </div>
                     <div><label className={labelClass}>Website URL</label><input {...register("startup.website")} className={inputClass} placeholder="https://example.com" /></div>
-                    <div><label className={labelClass}>Founded Year *</label><input {...register("startup.foundedYear", { required: true })} className={inputClass} placeholder="2023" /></div>
+                    <div>
+                      <label className={labelClass}>Founded Year *</label>
+                      <input {...register("startup.foundedYear", { required: "Founded year is required" })} className={inputClass} placeholder="2023" />
+                      {errors.startup?.foundedYear && <p className="text-destructive text-xs mt-1">{errors.startup.foundedYear.message as string}</p>}
+                    </div>
                     <div><label className={labelClass}>Annual Revenue (USD)</label><input {...register("startup.revenue")} className={inputClass} placeholder="500000" /></div>
                     <div><label className={labelClass}>Profit/Loss (USD)</label><input {...register("startup.profitLoss")} className={inputClass} placeholder="-120000" /></div>
                     <div><label className={labelClass}>Number of Employees</label><input {...register("startup.employees")} className={inputClass} placeholder="25" /></div>
