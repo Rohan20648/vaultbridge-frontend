@@ -1,32 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Filter, X } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PageTransition from "@/components/PageTransition";
 import StatusBadge from "@/components/StatusBadge";
+import { getStartups, getSharks, getIndustries } from "@/lib/api";
 
-const mockStartups = [
-  { id: 1, name: "NeuralForge AI", tagline: "Enterprise LLM infrastructure", industry: "AI/ML", status: "Active", stage: "Series A", funding: "$4.2M", employees: 28, founded: 2022 },
-  { id: 2, name: "GreenVolt Energy", tagline: "Next-gen battery recycling", industry: "Clean Energy", status: "Active", stage: "Seed", funding: "$1.8M", employees: 12, founded: 2023 },
-  { id: 3, name: "MedSync Health", tagline: "Remote patient monitoring", industry: "Healthcare", status: "IPO", stage: "Series C", funding: "$52M", employees: 340, founded: 2018 },
-  { id: 4, name: "FinStack", tagline: "Embedded banking APIs", industry: "FinTech", status: "Active", stage: "Series B", funding: "$18M", employees: 85, founded: 2020 },
-  { id: 5, name: "AgroSense", tagline: "Precision agriculture platform", industry: "AgTech", status: "Dormant", stage: "Pre-seed", funding: "$400K", employees: 5, founded: 2024 },
-  { id: 6, name: "Orbitra Labs", tagline: "Satellite data analytics", industry: "SpaceTech", status: "Acquired", stage: "Growth", funding: "$120M", employees: 200, founded: 2016 },
-  { id: 7, name: "CyberShield Pro", tagline: "Zero-trust security mesh", industry: "Cybersecurity", status: "Active", stage: "Series A", funding: "$8.5M", employees: 42, founded: 2021 },
-  { id: 8, name: "EduPlatform", tagline: "Adaptive learning engine", industry: "EdTech", status: "Pivoting", stage: "Seed", funding: "$2.1M", employees: 18, founded: 2022 },
-];
-
-const mockInvestors = [
-  { id: 1, name: "Sarah Chen", company: "Apex Ventures", netWorth: "$340M", type: "VC", bio: "15 years in deep tech investing. Former CTO at Scale AI." },
-  { id: 2, name: "Marcus Rivera", company: "Titan Capital", netWorth: "$1.2B", type: "PE", bio: "Built and exited 3 unicorns. Focus on enterprise SaaS." },
-  { id: 3, name: "Priya Sharma", company: "EmergeX Partners", netWorth: "$560M", type: "Angel", bio: "Early-stage investor in healthcare and biotech innovation." },
-  { id: 4, name: "David Kim", company: "BlueHarbor Group", netWorth: "$890M", type: "Family Office", bio: "Multi-generational wealth. Focus on sustainable infrastructure." },
-  { id: 5, name: "Elena Volkov", company: "NovaStar Fund", netWorth: "$420M", type: "VC", bio: "SpaceTech and defense technology specialist." },
-  { id: 6, name: "James O'Brien", company: "Atlantic Capital", netWorth: "$780M", type: "Corporate", bio: "Corporate venture arm. Fintech and embedded finance." },
-];
-
-const industries = ["All", "AI/ML", "FinTech", "Healthcare", "Clean Energy", "AgTech", "SpaceTech", "Cybersecurity", "EdTech"];
 const statuses = ["All", "Active", "IPO", "Acquired", "Dormant", "Shutdown", "Pivoting"];
 
 const ExplorePage = () => {
@@ -34,18 +14,48 @@ const ExplorePage = () => {
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [selectedStartup, setSelectedStartup] = useState<typeof mockStartups[0] | null>(null);
-  const [selectedInvestor, setSelectedInvestor] = useState<typeof mockInvestors[0] | null>(null);
+  const [startups, setStartups] = useState<any[]>([]);
+  const [investors, setInvestors] = useState<any[]>([]);
+  const [industries, setIndustries] = useState<string[]>(["All"]);
+  const [selectedStartup, setSelectedStartup] = useState<any | null>(null);
+  const [selectedInvestor, setSelectedInvestor] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredStartups = mockStartups.filter(s => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.tagline.toLowerCase().includes(search.toLowerCase());
-    const matchIndustry = industryFilter === "All" || s.industry === industryFilter;
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        setLoading(true);
+        const [startupRes, sharkRes, industryRes] = await Promise.all([
+          getStartups(),
+          getSharks(),
+          getIndustries(),
+        ]);
+        setStartups(startupRes.data || []);
+        setInvestors(sharkRes.data || []);
+        const industryNames = ["All", ...(industryRes.data || []).map((i: any) => i.industry_name)];
+        setIndustries(industryNames);
+      } catch (e: any) {
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  const filteredStartups = startups.filter(s => {
+    const matchSearch =
+      (s.startup_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.tagline || "").toLowerCase().includes(search.toLowerCase());
+    const matchIndustry = industryFilter === "All" || s.industry_name === industryFilter;
     const matchStatus = statusFilter === "All" || s.status === statusFilter;
     return matchSearch && matchIndustry && matchStatus;
   });
 
-  const filteredInvestors = mockInvestors.filter(inv =>
-    inv.name.toLowerCase().includes(search.toLowerCase()) || inv.company.toLowerCase().includes(search.toLowerCase())
+  const filteredInvestors = investors.filter(inv =>
+    `${inv.first_name} ${inv.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+    (inv.company_name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -95,53 +105,62 @@ const ExplorePage = () => {
               )}
             </div>
 
-            {/* Grid */}
-            {tab === "startups" ? (
+            {loading ? (
+              <div className="flex justify-center items-center py-20">
+                <Loader2 size={32} className="animate-spin text-primary" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-20 text-destructive">{error}</div>
+            ) : tab === "startups" ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredStartups.map((s, i) => (
+                {filteredStartups.length === 0 ? (
+                  <p className="col-span-4 text-center text-muted-foreground py-10">No startups found.</p>
+                ) : filteredStartups.map((s, i) => (
                   <motion.div
-                    key={s.id}
+                    key={s.startup_id}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06 }}
+                    transition={{ delay: i * 0.05 }}
                     onClick={() => setSelectedStartup(s)}
                     className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-foreground">{s.name}</h3>
+                      <h3 className="font-semibold text-foreground">{s.startup_name}</h3>
                       <StatusBadge status={s.status} />
                     </div>
-                    <p className="text-sm text-muted-foreground mb-4">{s.tagline}</p>
+                    <p className="text-sm text-muted-foreground mb-4">{s.tagline || "—"}</p>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{s.industry}</span>
-                      <span>{s.stage} · {s.funding}</span>
+                      <span className="bg-accent/50 px-2 py-1 rounded">{s.industry_name || "—"}</span>
+                      <span>{s.founded_year} · {s.total_funding_usd ? `$${(s.total_funding_usd / 1e6).toFixed(1)}M` : "N/A"}</span>
                     </div>
                   </motion.div>
                 ))}
               </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredInvestors.map((inv, i) => (
+                {filteredInvestors.length === 0 ? (
+                  <p className="col-span-3 text-center text-muted-foreground py-10">No investors found.</p>
+                ) : filteredInvestors.map((inv, i) => (
                   <motion.div
-                    key={inv.id}
+                    key={inv.shark_id}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06 }}
+                    transition={{ delay: i * 0.05 }}
                     onClick={() => setSelectedInvestor(inv)}
                     className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
                   >
                     <div className="flex items-center gap-4 mb-4">
                       <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                        <span className="text-primary font-bold">{inv.name.charAt(0)}</span>
+                        <span className="text-primary font-bold">{inv.first_name?.charAt(0)}</span>
                       </div>
                       <div>
-                        <h3 className="font-semibold text-foreground">{inv.name}</h3>
-                        <p className="text-sm text-muted-foreground">{inv.company}</p>
+                        <h3 className="font-semibold text-foreground">{inv.first_name} {inv.last_name}</h3>
+                        <p className="text-sm text-muted-foreground">{inv.company_name || "Independent"}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{inv.type}</span>
-                      <span>{inv.netWorth}</span>
+                      <span className="bg-accent/50 px-2 py-1 rounded">{inv.company_type || "Investor"}</span>
+                      <span>{inv.net_worth_usd_millions ? `$${inv.net_worth_usd_millions}M` : "—"}</span>
                     </div>
                   </motion.div>
                 ))}
@@ -155,18 +174,21 @@ const ExplorePage = () => {
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card rounded-2xl p-8 max-w-lg w-full" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-start mb-6">
                   <div>
-                    <h2 className="text-xl font-bold text-foreground">{selectedStartup.name}</h2>
-                    <p className="text-muted-foreground">{selectedStartup.tagline}</p>
+                    <h2 className="text-xl font-bold text-foreground">{selectedStartup.startup_name}</h2>
+                    <p className="text-muted-foreground">{selectedStartup.tagline || "—"}</p>
                   </div>
                   <button onClick={() => setSelectedStartup(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-muted-foreground">Industry</span><p className="font-medium text-foreground">{selectedStartup.industry}</p></div>
+                  <div><span className="text-muted-foreground">Industry</span><p className="font-medium text-foreground">{selectedStartup.industry_name || "—"}</p></div>
                   <div><span className="text-muted-foreground">Status</span><p><StatusBadge status={selectedStartup.status} /></p></div>
-                  <div><span className="text-muted-foreground">Funding Stage</span><p className="font-medium text-foreground">{selectedStartup.stage}</p></div>
-                  <div><span className="text-muted-foreground">Total Funding</span><p className="font-medium text-foreground">{selectedStartup.funding}</p></div>
-                  <div><span className="text-muted-foreground">Employees</span><p className="font-medium text-foreground">{selectedStartup.employees}</p></div>
-                  <div><span className="text-muted-foreground">Founded</span><p className="font-medium text-foreground">{selectedStartup.founded}</p></div>
+                  <div><span className="text-muted-foreground">Founded</span><p className="font-medium text-foreground">{selectedStartup.founded_year || "—"}</p></div>
+                  <div><span className="text-muted-foreground">Total Funding</span><p className="font-medium text-foreground">{selectedStartup.total_funding_usd ? `$${Number(selectedStartup.total_funding_usd).toLocaleString()}` : "N/A"}</p></div>
+                  <div><span className="text-muted-foreground">Employees</span><p className="font-medium text-foreground">{selectedStartup.num_employees ?? "—"}</p></div>
+                  <div><span className="text-muted-foreground">Location</span><p className="font-medium text-foreground">{selectedStartup.location_display || "—"}</p></div>
+                  {selectedStartup.website && (
+                    <div className="col-span-2"><span className="text-muted-foreground">Website</span><p><a href={selectedStartup.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm">{selectedStartup.website}</a></p></div>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -179,19 +201,20 @@ const ExplorePage = () => {
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center">
-                      <span className="text-primary font-bold text-xl">{selectedInvestor.name.charAt(0)}</span>
+                      <span className="text-primary font-bold text-xl">{selectedInvestor.first_name?.charAt(0)}</span>
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-foreground">{selectedInvestor.name}</h2>
-                      <p className="text-muted-foreground">{selectedInvestor.company}</p>
+                      <h2 className="text-xl font-bold text-foreground">{selectedInvestor.first_name} {selectedInvestor.last_name}</h2>
+                      <p className="text-muted-foreground">{selectedInvestor.company_name || "Independent"}</p>
                     </div>
                   </div>
                   <button onClick={() => setSelectedInvestor(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">{selectedInvestor.bio}</p>
+                {selectedInvestor.bio && <p className="text-sm text-muted-foreground mb-4">{selectedInvestor.bio}</p>}
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-muted-foreground">Type</span><p className="font-medium text-foreground">{selectedInvestor.type}</p></div>
-                  <div><span className="text-muted-foreground">Net Worth</span><p className="font-medium text-foreground">{selectedInvestor.netWorth}</p></div>
+                  <div><span className="text-muted-foreground">Type</span><p className="font-medium text-foreground">{selectedInvestor.company_type || "—"}</p></div>
+                  <div><span className="text-muted-foreground">Net Worth</span><p className="font-medium text-foreground">{selectedInvestor.net_worth_usd_millions ? `$${selectedInvestor.net_worth_usd_millions}M` : "—"}</p></div>
+                  <div><span className="text-muted-foreground">Nationality</span><p className="font-medium text-foreground">{selectedInvestor.nationality || "—"}</p></div>
                 </div>
               </motion.div>
             </div>
