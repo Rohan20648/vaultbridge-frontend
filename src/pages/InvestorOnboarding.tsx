@@ -20,7 +20,7 @@ const InvestorOnboarding = () => {
     getStartups().then(r => setStartups(r.data || [])).catch(() => {});
   }, []);
 
-  const { register, handleSubmit, control, watch } = useForm({
+  const { register, handleSubmit, control, watch, formState: { errors } } = useForm({
     defaultValues: {
       firstName: "", lastName: "", email: "", phone: "", dob: "", nationality: "", netWorth: "", bio: "",
       company: { name: "", type: "", website: "", aum: "", foundedYear: "", city: "", state: "", country: "" },
@@ -34,10 +34,26 @@ const InvestorOnboarding = () => {
   const portfolioFields = useFieldArray({ control, name: "portfolio" });
   const allData = watch();
 
-  const next = () => setStep(s => Math.min(s + 1, steps.length - 1));
+  const next = async () => {
+    if (step === 0) {
+      if (!allData.firstName || !allData.netWorth) {
+        await handleSubmit(() => {})();
+        return;
+      }
+    }
+    setStep(s => Math.min(s + 1, steps.length - 1));
+  };
   const prev = () => setStep(s => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
+    if (!allData.firstName) {
+      toast({ title: "Error", description: "First name is required. Please go back to Step 1.", variant: "destructive" });
+      return;
+    }
+    if (!allData.netWorth) {
+      toast({ title: "Error", description: "Net worth is required. Please go back to Step 1.", variant: "destructive" });
+      return;
+    }
     try {
       setSubmitting(true);
 
@@ -128,13 +144,21 @@ const InvestorOnboarding = () => {
                 <div className="space-y-5">
                   <h2 className="text-xl font-bold mb-4">Your Profile</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div><label className={labelClass}>First Name *</label><input {...register("firstName", { required: true })} className={inputClass} placeholder="Sarah" /></div>
+                    <div>
+                      <label className={labelClass}>First Name *</label>
+                      <input {...register("firstName", { required: "First name is required" })} className={inputClass} placeholder="Sarah" />
+                      {errors.firstName && <p className="text-destructive text-xs mt-1">{errors.firstName.message as string}</p>}
+                    </div>
                     <div><label className={labelClass}>Last Name</label><input {...register("lastName")} className={inputClass} placeholder="Chen" /></div>
                     <div><label className={labelClass}>Email</label><input {...register("email")} type="email" className={inputClass} placeholder="sarah@apexvc.com" /></div>
                     <div><label className={labelClass}>Phone</label><input {...register("phone")} className={inputClass} placeholder="+1 555 987 6543" /></div>
                     <div><label className={labelClass}>Date of Birth</label><input {...register("dob")} type="date" className={inputClass} /></div>
                     <div><label className={labelClass}>Nationality</label><input {...register("nationality")} className={inputClass} placeholder="American" /></div>
-                    <div><label className={labelClass}>Net Worth (USD millions) *</label><input {...register("netWorth", { required: true })} className={inputClass} placeholder="340" /></div>
+                    <div>
+                      <label className={labelClass}>Net Worth (USD millions) *</label>
+                      <input {...register("netWorth", { required: "Net worth is required" })} className={inputClass} placeholder="340" />
+                      {errors.netWorth && <p className="text-destructive text-xs mt-1">{errors.netWorth.message as string}</p>}
+                    </div>
                   </div>
                   <div><label className={labelClass}>Bio</label><textarea {...register("bio")} className={inputClass + " min-h-[100px]"} placeholder="Describe your investment philosophy..." /></div>
                 </div>
