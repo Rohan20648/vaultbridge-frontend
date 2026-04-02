@@ -1,25 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import PageTransition from "@/components/PageTransition";
 import { toast } from "@/hooks/use-toast";
+import { createShark, createPortfolio, createDeal, getStartups } from "@/lib/api";
 
-const steps = ["Profile", "Company", "Expertise", "Portfolio", "Deals", "Review"];
+const steps = ["Profile", "Company", "Expertise", "Portfolio", "Deal", "Review"];
 
 const InvestorOnboarding = () => {
   const [step, setStep] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [startups, setStartups] = useState<any[]>([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getStartups().then(r => setStartups(r.data || [])).catch(() => {});
+  }, []);
 
   const { register, handleSubmit, control, watch } = useForm({
     defaultValues: {
-      firstName: "", lastName: "", email: "", phone: "", dob: "", nationality: "", netWorth: "", bio: "", profileImage: "",
+      firstName: "", lastName: "", email: "", phone: "", dob: "", nationality: "", netWorth: "", bio: "",
       company: { name: "", type: "", website: "", aum: "", foundedYear: "", city: "", state: "", country: "" },
       expertise: [{ domain: "", years: "", isPrimary: false }],
-      portfolio: [{ startupId: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" }],
-      deal: { startupId: "", amount: "", equity: "", type: "Equity", date: "", status: "Pending", notes: "", contribution: "", equityShare: "", isLead: false },
+      portfolio: [{ startup_id: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" }],
+      deal: { startup_id: "", amount: "", equity: "", type: "Equity", date: "", status: "Pending", notes: "", contribution: "", equityShare: "", isLead: false },
     },
   });
 
@@ -30,9 +37,66 @@ const InvestorOnboarding = () => {
   const next = () => setStep(s => Math.min(s + 1, steps.length - 1));
   const prev = () => setStep(s => Math.max(s - 1, 0));
 
-  const onSubmit = () => {
-    toast({ title: "Profile Created!", description: "Your investor profile has been submitted successfully." });
-    navigate("/dashboard/investor");
+  const onSubmit = async () => {
+    try {
+      setSubmitting(true);
+
+      // 1. Create shark
+      const sharkRes = await createShark({
+        first_name: allData.firstName,
+        last_name: allData.lastName,
+        email: allData.email,
+        phone: allData.phone,
+        date_of_birth: allData.dob || null,
+        nationality: allData.nationality,
+        net_worth_usd_millions: allData.netWorth ? parseFloat(allData.netWorth) : null,
+        bio: allData.bio,
+        expertise_domain: allData.expertise[0]?.domain || null,
+      });
+      const shark_id = sharkRes.data?.shark_id;
+
+      // 2. Create portfolio entries
+      for (const p of allData.portfolio) {
+        if (p.startup_id && shark_id) {
+          await createPortfolio({
+            shark_id,
+            startup_id: parseInt(p.startup_id),
+            total_invested_usd: p.totalInvested ? parseFloat(p.totalInvested) : null,
+            current_equity_percent: p.equity ? parseFloat(p.equity) : null,
+            portfolio_status: p.status,
+            first_investment_date: p.firstDate || null,
+            current_valuation_usd: p.valuation ? parseFloat(p.valuation) : null,
+            roi_percent: p.roi ? parseFloat(p.roi) : null,
+          });
+        }
+      }
+
+      // 3. Create deal if startup provided
+      if (allData.deal.startup_id) {
+        await createDeal({
+          startup_id: parseInt(allData.deal.startup_id),
+          deal_amount_usd: allData.deal.amount ? parseFloat(allData.deal.amount) : null,
+          deal_equity_percent: allData.deal.equity ? parseFloat(allData.deal.equity) : null,
+          deal_type: allData.deal.type,
+          handshake_date: allData.deal.date || null,
+          deal_status: allData.deal.status,
+          deal_notes: allData.deal.notes,
+          sharks: shark_id ? [{
+            shark_id,
+            contribution: allData.deal.contribution ? parseFloat(allData.deal.contribution) : 0,
+            equity: allData.deal.equityShare ? parseFloat(allData.deal.equityShare) : 0,
+            is_lead: allData.deal.isLead ? 1 : 0,
+          }] : [],
+        });
+      }
+
+      toast({ title: "Profile Created!", description: "Your investor profile has been submitted successfully." });
+      navigate("/dashboard/investor");
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.response?.data?.error || "Failed to create profile. Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const inputClass = "w-full px-4 py-2.5 rounded-lg bg-muted border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all";
@@ -44,7 +108,6 @@ const InvestorOnboarding = () => {
       <PageTransition>
         <div className="min-h-screen pt-20 pb-16">
           <div className="container mx-auto px-4 max-w-3xl">
-            {/* Progress */}
             <div className="mb-10">
               <div className="flex items-center justify-between mb-3">
                 {steps.map((s, i) => (
@@ -60,26 +123,26 @@ const InvestorOnboarding = () => {
             </div>
 
             <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }} className="glass-card rounded-2xl p-8">
+
               {step === 0 && (
                 <div className="space-y-5">
                   <h2 className="text-xl font-bold mb-4">Your Profile</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div><label className={labelClass}>First Name</label><input {...register("firstName")} className={inputClass} placeholder="Sarah" /></div>
+                    <div><label className={labelClass}>First Name *</label><input {...register("firstName", { required: true })} className={inputClass} placeholder="Sarah" /></div>
                     <div><label className={labelClass}>Last Name</label><input {...register("lastName")} className={inputClass} placeholder="Chen" /></div>
                     <div><label className={labelClass}>Email</label><input {...register("email")} type="email" className={inputClass} placeholder="sarah@apexvc.com" /></div>
                     <div><label className={labelClass}>Phone</label><input {...register("phone")} className={inputClass} placeholder="+1 555 987 6543" /></div>
                     <div><label className={labelClass}>Date of Birth</label><input {...register("dob")} type="date" className={inputClass} /></div>
                     <div><label className={labelClass}>Nationality</label><input {...register("nationality")} className={inputClass} placeholder="American" /></div>
-                    <div><label className={labelClass}>Net Worth (USD millions)</label><input {...register("netWorth")} className={inputClass} placeholder="340" /></div>
-                    <div><label className={labelClass}>Profile Image URL</label><input {...register("profileImage")} className={inputClass} placeholder="https://..." /></div>
+                    <div><label className={labelClass}>Net Worth (USD millions) *</label><input {...register("netWorth", { required: true })} className={inputClass} placeholder="340" /></div>
                   </div>
-                  <div><label className={labelClass}>Bio</label><textarea {...register("bio")} className={inputClass + " min-h-[100px]"} placeholder="Describe your investment philosophy and track record..." /></div>
+                  <div><label className={labelClass}>Bio</label><textarea {...register("bio")} className={inputClass + " min-h-[100px]"} placeholder="Describe your investment philosophy..." /></div>
                 </div>
               )}
 
               {step === 1 && (
                 <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Your Company</h2>
+                  <h2 className="text-xl font-bold mb-4">Your Company (Optional)</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div><label className={labelClass}>Company Name</label><input {...register("company.name")} className={inputClass} placeholder="Apex Ventures" /></div>
                     <div>
@@ -91,9 +154,7 @@ const InvestorOnboarding = () => {
                     </div>
                     <div><label className={labelClass}>Website</label><input {...register("company.website")} className={inputClass} placeholder="https://apexventures.com" /></div>
                     <div><label className={labelClass}>AUM (USD millions)</label><input {...register("company.aum")} className={inputClass} placeholder="850" /></div>
-                    <div><label className={labelClass}>Founded Year</label><input {...register("company.foundedYear")} className={inputClass} placeholder="2015" /></div>
                     <div><label className={labelClass}>City</label><input {...register("company.city")} className={inputClass} placeholder="New York" /></div>
-                    <div><label className={labelClass}>State</label><input {...register("company.state")} className={inputClass} placeholder="New York" /></div>
                     <div><label className={labelClass}>Country</label><input {...register("company.country")} className={inputClass} placeholder="United States" /></div>
                   </div>
                 </div>
@@ -134,7 +195,13 @@ const InvestorOnboarding = () => {
                         {idx > 0 && <button type="button" onClick={() => portfolioFields.remove(idx)} className="text-destructive"><Trash2 size={16} /></button>}
                       </div>
                       <div className="grid sm:grid-cols-2 gap-4">
-                        <div><label className={labelClass}>Startup Name</label><input {...register(`portfolio.${idx}.startupId`)} className={inputClass} placeholder="NeuralForge AI" /></div>
+                        <div>
+                          <label className={labelClass}>Startup</label>
+                          <select {...register(`portfolio.${idx}.startup_id`)} className={inputClass}>
+                            <option value="">Select Startup</option>
+                            {startups.map((s: any) => <option key={s.startup_id} value={s.startup_id}>{s.startup_name}</option>)}
+                          </select>
+                        </div>
                         <div><label className={labelClass}>Total Invested (USD)</label><input {...register(`portfolio.${idx}.totalInvested`)} className={inputClass} placeholder="2000000" /></div>
                         <div><label className={labelClass}>Current Equity %</label><input {...register(`portfolio.${idx}.equity`)} className={inputClass} placeholder="15" /></div>
                         <div>
@@ -149,7 +216,7 @@ const InvestorOnboarding = () => {
                       </div>
                     </div>
                   ))}
-                  <button type="button" onClick={() => portfolioFields.append({ startupId: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" })} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+                  <button type="button" onClick={() => portfolioFields.append({ startup_id: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" })} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
                     <Plus size={14} /> Add Another Investment
                   </button>
                 </div>
@@ -157,9 +224,15 @@ const InvestorOnboarding = () => {
 
               {step === 4 && (
                 <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Add a Deal</h2>
+                  <h2 className="text-xl font-bold mb-4">Add a Deal (Optional)</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div><label className={labelClass}>Startup</label><input {...register("deal.startupId")} className={inputClass} placeholder="NeuralForge AI" /></div>
+                    <div>
+                      <label className={labelClass}>Startup</label>
+                      <select {...register("deal.startup_id")} className={inputClass}>
+                        <option value="">Select Startup</option>
+                        {startups.map((s: any) => <option key={s.startup_id} value={s.startup_id}>{s.startup_name}</option>)}
+                      </select>
+                    </div>
                     <div><label className={labelClass}>Deal Amount (USD)</label><input {...register("deal.amount")} className={inputClass} placeholder="1500000" /></div>
                     <div><label className={labelClass}>Deal Equity %</label><input {...register("deal.equity")} className={inputClass} placeholder="10" /></div>
                     <div>
@@ -172,7 +245,7 @@ const InvestorOnboarding = () => {
                     <div>
                       <label className={labelClass}>Deal Status</label>
                       <select {...register("deal.status")} className={inputClass}>
-                        {["Pending", "Active", "Closed", "Cancelled"].map(s => <option key={s}>{s}</option>)}
+                        {["Pending", "Handshake", "Active", "Closed", "Cancelled"].map(s => <option key={s}>{s}</option>)}
                       </select>
                     </div>
                     <div><label className={labelClass}>Your Contribution (USD)</label><input {...register("deal.contribution")} className={inputClass} /></div>
@@ -191,10 +264,10 @@ const InvestorOnboarding = () => {
                   <h2 className="text-xl font-bold mb-4">Review & Submit</h2>
                   <div className="space-y-4">
                     <ReviewSection title="Profile" data={`${allData.firstName} ${allData.lastName} · ${allData.email} · $${allData.netWorth}M net worth`} onEdit={() => setStep(0)} />
-                    <ReviewSection title="Company" data={`${allData.company.name} · ${allData.company.type} · $${allData.company.aum}M AUM`} onEdit={() => setStep(1)} />
-                    <ReviewSection title="Expertise" data={allData.expertise.map(e => `${e.domain} (${e.years}yr)`).join(", ") || "Not specified"} onEdit={() => setStep(2)} />
-                    <ReviewSection title="Portfolio" data={`${allData.portfolio.length} investment(s)`} onEdit={() => setStep(3)} />
-                    <ReviewSection title="Deal" data={`${allData.deal.startupId || "None"} · ${allData.deal.type} · $${allData.deal.amount || "0"}`} onEdit={() => setStep(4)} />
+                    <ReviewSection title="Company" data={`${allData.company.name || "None"} · ${allData.company.type || "—"}`} onEdit={() => setStep(1)} />
+                    <ReviewSection title="Expertise" data={allData.expertise.map(e => `${e.domain} (${e.years}yr)`).filter(e => e.trim() !== " (yr)").join(", ") || "Not specified"} onEdit={() => setStep(2)} />
+                    <ReviewSection title="Portfolio" data={`${allData.portfolio.filter(p => p.startup_id).length} investment(s)`} onEdit={() => setStep(3)} />
+                    <ReviewSection title="Deal" data={`${allData.deal.startup_id ? `Startup ID ${allData.deal.startup_id}` : "None"} · ${allData.deal.type}`} onEdit={() => setStep(4)} />
                   </div>
                 </div>
               )}
@@ -208,8 +281,8 @@ const InvestorOnboarding = () => {
                     Next <ChevronRight size={16} />
                   </button>
                 ) : (
-                  <button type="button" onClick={handleSubmit(onSubmit)} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors">
-                    <Check size={16} /> Submit & Create Profile
+                  <button type="button" onClick={handleSubmit(onSubmit)} disabled={submitting} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors disabled:opacity-70">
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Submit & Create Profile
                   </button>
                 )}
               </div>
