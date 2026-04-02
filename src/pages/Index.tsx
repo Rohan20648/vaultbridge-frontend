@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Rocket, Handshake, TrendingUp, ArrowRight, Building2, Users } from "lucide-react";
+import { Rocket, Handshake, TrendingUp, ArrowRight, Building2, Users, Loader2 } from "lucide-react";
 import VaultAnimation from "@/components/VaultAnimation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import StatusBadge from "@/components/StatusBadge";
 import PageTransition from "@/components/PageTransition";
+import { getStartups, getSharks } from "@/lib/api";
 
 const stagger = {
   hidden: {},
@@ -17,23 +19,21 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
-const mockStartups = [
-  { id: 1, name: "NeuralForge AI", tagline: "Enterprise LLM infrastructure", industry: "Artificial Intelligence", status: "Active", stage: "Series A", funding: "$4.2M" },
-  { id: 2, name: "GreenVolt Energy", tagline: "Next-gen battery recycling", industry: "Clean Energy", status: "Active", stage: "Seed", funding: "$1.8M" },
-  { id: 3, name: "MedSync Health", tagline: "Remote patient monitoring", industry: "Healthcare", status: "IPO", stage: "Series C", funding: "$52M" },
-  { id: 4, name: "FinStack", tagline: "Embedded banking APIs", industry: "FinTech", status: "Active", stage: "Series B", funding: "$18M" },
-  { id: 5, name: "AgroSense", tagline: "Precision agriculture platform", industry: "AgTech", status: "Dormant", stage: "Pre-seed", funding: "$400K" },
-  { id: 6, name: "Orbitra Labs", tagline: "Satellite data analytics", industry: "SpaceTech", status: "Acquired", stage: "Growth", funding: "$120M" },
-];
-
-const mockInvestors = [
-  { id: 1, name: "Sarah Chen", company: "Apex Ventures", netWorth: "$340M", type: "VC" },
-  { id: 2, name: "Marcus Rivera", company: "Titan Capital", netWorth: "$1.2B", type: "PE" },
-  { id: 3, name: "Priya Sharma", company: "EmergeX Partners", netWorth: "$560M", type: "Angel" },
-  { id: 4, name: "David Kim", company: "BlueHarbor Group", netWorth: "$890M", type: "Family Office" },
-];
-
 const Homepage = () => {
+  const [startups, setStartups] = useState<any[]>([]);
+  const [investors, setInvestors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getStartups(), getSharks()])
+      .then(([sRes, invRes]) => {
+        setStartups((sRes.data || []).slice(0, 6));
+        setInvestors((invRes.data || []).slice(0, 4));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <>
       <VaultAnimation />
@@ -42,7 +42,6 @@ const Homepage = () => {
         <div className="min-h-screen pt-16">
           {/* Hero */}
           <section className="relative gradient-hero overflow-hidden py-24 md:py-36">
-            {/* Floating blobs */}
             <div className="absolute top-20 left-10 w-72 h-72 rounded-full opacity-10 animate-float" style={{ background: "radial-gradient(circle, hsl(217 91% 60%), transparent)" }} />
             <div className="absolute bottom-10 right-20 w-96 h-96 rounded-full opacity-8 animate-float-delayed" style={{ background: "radial-gradient(circle, hsl(160 84% 39%), transparent)" }} />
             <div className="absolute top-40 right-40 w-48 h-48 rounded-full opacity-5 animate-float-slow" style={{ background: "radial-gradient(circle, hsl(38 92% 50%), transparent)" }} />
@@ -85,10 +84,10 @@ const Homepage = () => {
             <div className="container mx-auto px-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
                 {[
-                  { label: "Startups Incubated", target: 482, suffix: "+" },
-                  { label: "Active Investors", target: 156 },
-                  { label: "Deals Closed", target: 1240 },
-                  { label: "Funding Raised", target: 2, prefix: "$", suffix: ".4B" },
+                  { label: "Startups Incubated", target: startups.length || 0, suffix: "+" },
+                  { label: "Active Investors", target: investors.length || 0 },
+                  { label: "Deals Closed", target: 0 },
+                  { label: "Funding Raised", target: 0, prefix: "$", suffix: "M" },
                 ].map((s) => (
                   <div key={s.label}>
                     <AnimatedCounter target={s.target} prefix={s.prefix} suffix={s.suffix} />
@@ -138,7 +137,7 @@ const Homepage = () => {
             </div>
           </section>
 
-          {/* Startup Directory Teaser */}
+          {/* Featured Startups */}
           <section className="py-20 border-t border-border/30">
             <div className="container mx-auto px-4">
               <div className="flex items-center justify-between mb-10">
@@ -147,31 +146,35 @@ const Homepage = () => {
                   View All <ArrowRight size={14} />
                 </Link>
               </div>
-              <motion.div
-                variants={stagger}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true }}
-                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
-              >
-                {mockStartups.map((s) => (
-                  <motion.div
-                    key={s.id}
-                    variants={fadeUp}
-                    className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-foreground">{s.name}</h3>
-                      <StatusBadge status={s.status} />
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">{s.tagline}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{s.industry}</span>
-                      <span>{s.stage} · {s.funding}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
+              {loading ? (
+                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin text-primary" /></div>
+              ) : (
+                <motion.div
+                  variants={stagger}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true }}
+                  className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
+                >
+                  {startups.map((s) => (
+                    <motion.div
+                      key={s.startup_id}
+                      variants={fadeUp}
+                      className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="font-semibold text-foreground">{s.startup_name}</h3>
+                        <StatusBadge status={s.status} />
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4">{s.tagline || "—"}</p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="bg-accent/50 px-2 py-1 rounded">{s.industry_name || "—"}</span>
+                        <span>{s.founded_year} · {s.total_funding_usd ? `$${(s.total_funding_usd / 1e6).toFixed(1)}M` : "N/A"}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
 
               <div className="flex items-center justify-between mb-10 mt-16">
                 <h2 className="text-2xl md:text-3xl font-bold">Top Investors</h2>
@@ -179,31 +182,35 @@ const Homepage = () => {
                   View All <ArrowRight size={14} />
                 </Link>
               </div>
-              <motion.div
-                variants={stagger}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true }}
-                className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
-              >
-                {mockInvestors.map((inv) => (
-                  <motion.div
-                    key={inv.id}
-                    variants={fadeUp}
-                    className="glass-card glass-card-hover rounded-xl p-6 text-center"
-                  >
-                    <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-primary font-bold text-lg">{inv.name.charAt(0)}</span>
-                    </div>
-                    <h3 className="font-semibold text-foreground">{inv.name}</h3>
-                    <p className="text-sm text-muted-foreground">{inv.company}</p>
-                    <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{inv.type}</span>
-                      <span>{inv.netWorth}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
+              {loading ? (
+                <div className="flex justify-center py-12"><Loader2 size={28} className="animate-spin text-primary" /></div>
+              ) : (
+                <motion.div
+                  variants={stagger}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true }}
+                  className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                >
+                  {investors.map((inv) => (
+                    <motion.div
+                      key={inv.shark_id}
+                      variants={fadeUp}
+                      className="glass-card glass-card-hover rounded-xl p-6 text-center"
+                    >
+                      <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center mx-auto mb-4">
+                        <span className="text-primary font-bold text-lg">{inv.first_name?.charAt(0)}</span>
+                      </div>
+                      <h3 className="font-semibold text-foreground">{inv.first_name} {inv.last_name}</h3>
+                      <p className="text-sm text-muted-foreground">{inv.company_name || "Independent"}</p>
+                      <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <span className="bg-accent/50 px-2 py-1 rounded">{inv.company_type || "Investor"}</span>
+                        <span>{inv.net_worth_usd_millions ? `$${inv.net_worth_usd_millions}M` : "—"}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
             </div>
           </section>
 
