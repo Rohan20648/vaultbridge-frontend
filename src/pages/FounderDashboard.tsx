@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Package, Handshake, Flag, Users, Activity, Shield, FileText, TrendingUp, Home, Menu } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import { BarChart3, Package, Handshake, Flag, Users, Activity, Shield, TrendingUp, Home, Menu, Loader2 } from "lucide-react";
+import {
+  LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
+} from "recharts";
 import StatusBadge from "@/components/StatusBadge";
 import PageTransition from "@/components/PageTransition";
+import {
+  getStartups, getProducts, getDeals, getMilestones, getTeamHistory,
+  getMetrics, getHealthScores, getValuations
+} from "@/lib/api";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: Home },
@@ -13,67 +20,93 @@ const tabs = [
   { key: "team", label: "Team", icon: Users },
   { key: "metrics", label: "Metrics", icon: Activity },
   { key: "health", label: "Health Score", icon: Shield },
-  { key: "patents", label: "Patents", icon: FileText },
   { key: "valuations", label: "Valuations", icon: TrendingUp },
 ];
 
-const revenueData = [
-  { month: "Jan", revenue: 120000, burn: 180000 },
-  { month: "Feb", revenue: 135000, burn: 175000 },
-  { month: "Mar", revenue: 160000, burn: 170000 },
-  { month: "Apr", revenue: 190000, burn: 165000 },
-  { month: "May", revenue: 220000, burn: 160000 },
-  { month: "Jun", revenue: 255000, burn: 155000 },
-];
+const chartColors = { primary: "hsl(217, 91%, 60%)", secondary: "hsl(160, 84%, 39%)", muted: "hsl(215, 20%, 55%)" };
 
-const healthData = [
-  { subject: "Financial", A: 82 },
-  { subject: "Team", A: 75 },
-  { subject: "Product", A: 90 },
-  { subject: "Market", A: 68 },
-  { subject: "Growth", A: 85 },
-];
-
-const teamData = [
-  { month: "Jan", count: 18 }, { month: "Feb", count: 20 }, { month: "Mar", count: 22 },
-  { month: "Apr", count: 25 }, { month: "May", count: 27 }, { month: "Jun", count: 28 },
-];
-
-const valuationData = [
-  { date: "2023 Q1", val: 2 }, { date: "2023 Q3", val: 4.2 }, { date: "2024 Q1", val: 6.8 },
-  { date: "2024 Q3", val: 10 }, { date: "2025 Q1", val: 14 }, { date: "2025 Q3", val: 18.5 },
-];
-
-const products = [
-  { name: "ForgeAPI", category: "SaaS", price: "$299/mo", unitsSold: 1420, patented: true },
-  { name: "ForgeStudio", category: "Platform", price: "$149/mo", unitsSold: 890, patented: false },
-  { name: "ForgeEdge", category: "API", price: "$0.01/call", unitsSold: 45000, patented: true },
-];
-
-const deals = [
-  { id: 1, shark: "Sarah Chen", amount: "$2M", equity: "12%", status: "Active", type: "Equity" },
-  { id: 2, shark: "Marcus Rivera", amount: "$1.5M", equity: "8%", status: "Active", type: "Convertible Note" },
-  { id: 3, shark: "David Kim", amount: "$500K", equity: "3%", status: "Closed", type: "Equity" },
-];
-
-const milestones = [
-  { title: "Series A Closed", date: "2024-06-15", type: "Funding", verified: true },
-  { title: "100K Users Milestone", date: "2024-09-22", type: "Growth", verified: true },
-  { title: "SOC 2 Certification", date: "2025-01-10", type: "Compliance", verified: false },
-  { title: "EU Market Launch", date: "2025-03-01", type: "Expansion", verified: true },
-];
-
-const patents = [
-  { title: "Neural Architecture Search Method", status: "Granted", filed: "2023-03-15", granted: "2024-08-20" },
-  { title: "Distributed LLM Inference Protocol", status: "Pending", filed: "2024-06-01", granted: null },
-  { title: "Adaptive Token Compression", status: "Granted", filed: "2023-09-10", granted: "2025-01-15" },
-];
+const Spinner = () => (
+  <div className="flex justify-center items-center py-20">
+    <Loader2 size={28} className="animate-spin text-primary" />
+  </div>
+);
 
 const FounderDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const chartColors = { primary: "hsl(217, 91%, 60%)", secondary: "hsl(160, 84%, 39%)", muted: "hsl(215, 20%, 55%)" };
+  // Current startup: take the first one from the list
+  const [startup, setStartup] = useState<any>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
+  const [milestones, setMilestones] = useState<any[]>([]);
+  const [teamHistory, setTeamHistory] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any[]>([]);
+  const [healthScores, setHealthScores] = useState<any[]>([]);
+  const [valuations, setValuations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const [sRes, pRes, dRes, mRes, tRes, meRes, hRes, vRes] = await Promise.all([
+          getStartups(),
+          getProducts(),
+          getDeals(),
+          getMilestones(),
+          getTeamHistory(),
+          getMetrics(),
+          getHealthScores(),
+          getValuations(),
+        ]);
+        const firstStartup = (sRes.data || [])[0];
+        setStartup(firstStartup);
+
+        if (firstStartup) {
+          const sid = firstStartup.startup_id;
+          setProducts((pRes.data || []).filter((p: any) => p.startup_id === sid));
+          setDeals((dRes.data || []).filter((d: any) => d.startup_id === sid));
+          setMilestones((mRes.data || []).filter((m: any) => m.startup_id === sid));
+          setTeamHistory((tRes.data || []).filter((t: any) => t.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
+          setMetrics((meRes.data || []).filter((m: any) => m.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
+          setHealthScores((hRes.data || []).filter((h: any) => h.startup_id === sid));
+          setValuations((vRes.data || []).filter((v: any) => v.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const latestMetric = metrics[metrics.length - 1];
+  const latestHealth = healthScores[0];
+  const healthRadarData = latestHealth ? [
+    { subject: "Financial", A: latestHealth.financial_score || 0 },
+    { subject: "Team", A: latestHealth.team_score || 0 },
+    { subject: "Product", A: latestHealth.product_score || 0 },
+    { subject: "Market", A: latestHealth.market_score || 0 },
+    { subject: "Overall", A: latestHealth.overall_score || 0 },
+  ] : [];
+
+  const revenueChartData = metrics.map((m: any) => ({
+    month: m.snapshot_date?.slice(0, 7),
+    revenue: m.monthly_revenue_usd || 0,
+    burn: m.monthly_burn_usd || 0,
+  }));
+
+  const teamChartData = teamHistory.map((t: any) => ({
+    month: t.record_date?.slice(0, 7),
+    count: t.total_headcount || 0,
+  }));
+
+  const valuationChartData = valuations.map((v: any) => ({
+    date: v.valuation_date?.slice(0, 10),
+    val: v.valuation_usd ? (v.valuation_usd / 1e6) : 0,
+  }));
 
   return (
     <PageTransition>
@@ -103,241 +136,286 @@ const FounderDashboard = () => {
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground hover:text-foreground">
               <Menu size={20} />
             </button>
-            <h1 className="text-lg font-semibold">NeuralForge AI</h1>
-            <StatusBadge status="Active" />
+            <h1 className="text-lg font-semibold">{startup?.startup_name || "Loading..."}</h1>
+            {startup && <StatusBadge status={startup.status} />}
           </header>
 
           <div className="p-6">
-            <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-              {activeTab === "overview" && (
-                <div className="space-y-6">
-                  <div className="grid sm:grid-cols-3 gap-5">
-                    {[
-                      { label: "Monthly Revenue", value: "$255K", change: "+16%" },
-                      { label: "Monthly Burn", value: "$155K", change: "-3%" },
-                      { label: "Runway", value: "18 months", change: "" },
-                    ].map(s => (
-                      <div key={s.label} className="glass-card rounded-xl p-5">
-                        <p className="text-sm text-muted-foreground">{s.label}</p>
-                        <p className="text-2xl font-bold mt-1 text-foreground">{s.value}</p>
-                        {s.change && <p className="text-xs text-success mt-1">{s.change}</p>}
+            {loading ? (
+              <Spinner />
+            ) : (
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                {activeTab === "overview" && (
+                  <div className="space-y-6">
+                    <div className="grid sm:grid-cols-3 gap-5">
+                      <div className="glass-card rounded-xl p-5">
+                        <p className="text-sm text-muted-foreground">Monthly Revenue</p>
+                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.monthly_revenue_usd ? `$${Number(latestMetric.monthly_revenue_usd).toLocaleString()}` : "N/A"}</p>
                       </div>
-                    ))}
-                  </div>
-                  <div className="glass-card rounded-xl p-5">
-                    <h3 className="font-semibold mb-4">Revenue vs Burn Rate</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <AreaChart data={revenueData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                        <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
-                        <YAxis stroke={chartColors.muted} fontSize={12} />
-                        <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                        <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.1} />
-                        <Area type="monotone" dataKey="burn" stroke={chartColors.secondary} fill={chartColors.secondary} fillOpacity={0.1} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="glass-card rounded-xl p-5">
-                    <h3 className="font-semibold mb-4">Health Score</h3>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <RadarChart data={healthData}>
-                        <PolarGrid stroke="hsl(217,33%,18%)" />
-                        <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
-                        <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.2} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "products" && (
-                <div>
-                  <h2 className="text-xl font-bold mb-5">Products</h2>
-                  <div className="glass-card rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                        <th className="p-4 font-medium">Product</th><th className="p-4 font-medium">Category</th><th className="p-4 font-medium">Price</th><th className="p-4 font-medium">Units Sold</th><th className="p-4 font-medium">Patented</th>
-                      </tr></thead>
-                      <tbody>
-                        {products.map(p => (
-                          <tr key={p.name} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
-                            <td className="p-4 font-medium text-foreground">{p.name}</td>
-                            <td className="p-4 text-muted-foreground">{p.category}</td>
-                            <td className="p-4 text-muted-foreground">{p.price}</td>
-                            <td className="p-4 text-muted-foreground">{p.unitsSold.toLocaleString()}</td>
-                            <td className="p-4">{p.patented ? <span className="text-success text-xs">✓ Yes</span> : <span className="text-muted-foreground text-xs">No</span>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "deals" && (
-                <div>
-                  <h2 className="text-xl font-bold mb-5">Deals</h2>
-                  <div className="space-y-4">
-                    {deals.map(d => (
-                      <div key={d.id} className="glass-card glass-card-hover rounded-xl p-5 flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-foreground">{d.shark}</h3>
-                          <p className="text-sm text-muted-foreground">{d.type} · {d.equity} equity</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-foreground">{d.amount}</p>
-                          <StatusBadge status={d.status} />
-                        </div>
+                      <div className="glass-card rounded-xl p-5">
+                        <p className="text-sm text-muted-foreground">Monthly Burn</p>
+                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.monthly_burn_usd ? `$${Number(latestMetric.monthly_burn_usd).toLocaleString()}` : "N/A"}</p>
                       </div>
-                    ))}
+                      <div className="glass-card rounded-xl p-5">
+                        <p className="text-sm text-muted-foreground">Runway</p>
+                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.runway_months ? `${latestMetric.runway_months} months` : "N/A"}</p>
+                      </div>
+                    </div>
+                    {revenueChartData.length > 0 && (
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-4">Revenue vs Burn Rate</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <AreaChart data={revenueChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                            <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
+                            <YAxis stroke={chartColors.muted} fontSize={12} />
+                            <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                            <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.1} />
+                            <Area type="monotone" dataKey="burn" stroke={chartColors.secondary} fill={chartColors.secondary} fillOpacity={0.1} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                    {healthRadarData.length > 0 && (
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-4">Health Score</h3>
+                        <ResponsiveContainer width="100%" height={280}>
+                          <RadarChart data={healthRadarData}>
+                            <PolarGrid stroke="hsl(217,33%,18%)" />
+                            <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
+                            <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
+                            <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.2} />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {activeTab === "milestones" && (
-                <div>
-                  <h2 className="text-xl font-bold mb-5">Milestones</h2>
-                  <div className="relative ml-4 border-l-2 border-border/50 space-y-6 pl-8">
-                    {milestones.map((m, i) => (
-                      <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} className="relative">
-                        <div className="absolute -left-[2.55rem] top-1 w-4 h-4 rounded-full bg-primary border-2 border-background" />
-                        <div className="glass-card rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-foreground">{m.title}</h3>
-                            {m.verified && <span className="text-xs bg-success/15 text-success px-2 py-0.5 rounded-full">Verified</span>}
+                {activeTab === "products" && (
+                  <div>
+                    <h2 className="text-xl font-bold mb-5">Products</h2>
+                    {products.length === 0 ? <p className="text-muted-foreground">No products found.</p> : (
+                      <div className="glass-card rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
+                            <th className="p-4 font-medium">Product</th>
+                            <th className="p-4 font-medium">Category</th>
+                            <th className="p-4 font-medium">Unit Price</th>
+                            <th className="p-4 font-medium">Units Sold</th>
+                            <th className="p-4 font-medium">Patented</th>
+                            <th className="p-4 font-medium">Launch Date</th>
+                          </tr></thead>
+                          <tbody>
+                            {products.map((p: any) => (
+                              <tr key={p.product_id} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
+                                <td className="p-4 font-medium text-foreground">{p.product_name}</td>
+                                <td className="p-4 text-muted-foreground">{p.category_name || "—"}</td>
+                                <td className="p-4 text-muted-foreground">{p.unit_price_usd ? `$${p.unit_price_usd}` : "—"}</td>
+                                <td className="p-4 text-muted-foreground">{p.units_sold?.toLocaleString() ?? "—"}</td>
+                                <td className="p-4">{p.is_patented ? <span className="text-success text-xs">✓ Yes</span> : <span className="text-muted-foreground text-xs">No</span>}</td>
+                                <td className="p-4 text-muted-foreground">{p.launch_date?.slice(0, 10) || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "deals" && (
+                  <div>
+                    <h2 className="text-xl font-bold mb-5">Deals</h2>
+                    {deals.length === 0 ? <p className="text-muted-foreground">No deals found.</p> : (
+                      <div className="space-y-4">
+                        {deals.map((d: any) => (
+                          <div key={d.deal_id} className="glass-card glass-card-hover rounded-xl p-5 flex items-center justify-between">
+                            <div>
+                              <h3 className="font-semibold text-foreground">{d.sharks || "Unknown Investor"}</h3>
+                              <p className="text-sm text-muted-foreground">{d.deal_type} · {d.deal_equity_percent}% equity</p>
+                              {d.handshake_date && <p className="text-xs text-muted-foreground">{d.handshake_date?.slice(0, 10)}</p>}
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-foreground">{d.deal_amount_usd ? `$${Number(d.deal_amount_usd).toLocaleString()}` : "—"}</p>
+                              <StatusBadge status={d.deal_status} />
+                            </div>
                           </div>
-                          <p className="text-sm text-muted-foreground">{m.date} · {m.type}</p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "team" && (
-                <div className="space-y-6">
-                  <h2 className="text-xl font-bold">Team</h2>
-                  <div className="glass-card rounded-xl p-5">
-                    <h3 className="font-semibold mb-4">Headcount Over Time</h3>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={teamData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                        <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
-                        <YAxis stroke={chartColors.muted} fontSize={12} />
-                        <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                        <Line type="monotone" dataKey="count" stroke={chartColors.primary} strokeWidth={2} dot={{ r: 4, fill: chartColors.primary }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="glass-card rounded-xl p-5">
-                    <h3 className="font-semibold mb-4">Department Breakdown</h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={[{ dept: "Engineering", count: 12 }, { dept: "Product", count: 4 }, { dept: "Sales", count: 5 }, { dept: "Marketing", count: 3 }, { dept: "Ops", count: 4 }]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                        <XAxis dataKey="dept" stroke={chartColors.muted} fontSize={12} />
-                        <YAxis stroke={chartColors.muted} fontSize={12} />
-                        <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                        <Bar dataKey="count" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "metrics" && (
-                <div>
-                  <h2 className="text-xl font-bold mb-5">Operational Metrics</h2>
-                  <div className="glass-card rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                        <th className="p-4 font-medium">Month</th><th className="p-4 font-medium">Revenue</th><th className="p-4 font-medium">Burn</th><th className="p-4 font-medium">Runway</th><th className="p-4 font-medium">Churn</th><th className="p-4 font-medium">NPS</th>
-                      </tr></thead>
-                      <tbody>
-                        {revenueData.map(r => (
-                          <tr key={r.month} className="border-b border-border/30">
-                            <td className="p-4 font-medium text-foreground">{r.month}</td>
-                            <td className="p-4 text-muted-foreground">${(r.revenue / 1000).toFixed(0)}K</td>
-                            <td className="p-4 text-muted-foreground">${(r.burn / 1000).toFixed(0)}K</td>
-                            <td className="p-4 text-muted-foreground">{Math.floor(4200000 / r.burn)}mo</td>
-                            <td className="p-4 text-muted-foreground">{(Math.random() * 3 + 1).toFixed(1)}%</td>
-                            <td className="p-4 text-muted-foreground">{Math.floor(Math.random() * 20 + 60)}</td>
-                          </tr>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "health" && (
-                <div className="space-y-6">
-                  <h2 className="text-xl font-bold">Health Score</h2>
-                  <div className="glass-card rounded-xl p-5">
-                    <ResponsiveContainer width="100%" height={350}>
-                      <RadarChart data={healthData}>
-                        <PolarGrid stroke="hsl(217,33%,18%)" />
-                        <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
-                        <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.25} strokeWidth={2} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "patents" && (
-                <div>
-                  <h2 className="text-xl font-bold mb-5">Patents</h2>
-                  <div className="space-y-4">
-                    {patents.map((p, i) => (
-                      <div key={i} className="glass-card rounded-xl p-5">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-semibold text-foreground">{p.title}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">Filed: {p.filed}{p.granted ? ` · Granted: ${p.granted}` : ""}</p>
-                          </div>
-                          <StatusBadge status={p.status === "Granted" ? "Active" : "Dormant"} />
-                        </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {activeTab === "valuations" && (
-                <div className="space-y-6">
-                  <h2 className="text-xl font-bold">Valuations</h2>
-                  <div className="glass-card rounded-xl p-5">
-                    <h3 className="font-semibold mb-4">Valuation Over Time ($M)</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={valuationData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                        <XAxis dataKey="date" stroke={chartColors.muted} fontSize={12} />
-                        <YAxis stroke={chartColors.muted} fontSize={12} />
-                        <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                        <Line type="monotone" dataKey="val" stroke={chartColors.secondary} strokeWidth={2} dot={{ r: 5, fill: chartColors.secondary }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="glass-card rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                        <th className="p-4 font-medium">Period</th><th className="p-4 font-medium">Valuation</th>
-                      </tr></thead>
-                      <tbody>
-                        {valuationData.map(v => (
-                          <tr key={v.date} className="border-b border-border/30">
-                            <td className="p-4 text-foreground">{v.date}</td>
-                            <td className="p-4 text-muted-foreground">${v.val}M</td>
-                          </tr>
+                {activeTab === "milestones" && (
+                  <div>
+                    <h2 className="text-xl font-bold mb-5">Milestones</h2>
+                    {milestones.length === 0 ? <p className="text-muted-foreground">No milestones found.</p> : (
+                      <div className="relative ml-4 border-l-2 border-border/50 space-y-6 pl-8">
+                        {milestones.map((m: any, i: number) => (
+                          <motion.div key={m.milestone_id || i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }} className="relative">
+                            <div className="absolute -left-[2.55rem] top-1 w-4 h-4 rounded-full bg-primary border-2 border-background" />
+                            <div className="glass-card rounded-xl p-4">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-foreground">{m.description || m.milestone_type}</h3>
+                                {m.verified ? <span className="text-xs bg-success/15 text-success px-2 py-0.5 rounded-full">Verified</span> : null}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{m.milestone_date?.slice(0, 10)} · {m.milestone_type}</p>
+                            </div>
+                          </motion.div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </motion.div>
+                )}
+
+                {activeTab === "team" && (
+                  <div className="space-y-6">
+                    <h2 className="text-xl font-bold">Team</h2>
+                    {teamChartData.length > 0 ? (
+                      <>
+                        <div className="glass-card rounded-xl p-5">
+                          <h3 className="font-semibold mb-4">Headcount Over Time</h3>
+                          <ResponsiveContainer width="100%" height={280}>
+                            <LineChart data={teamChartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                              <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
+                              <YAxis stroke={chartColors.muted} fontSize={12} />
+                              <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                              <Line type="monotone" dataKey="count" stroke={chartColors.primary} strokeWidth={2} dot={{ r: 4, fill: chartColors.primary }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        {teamHistory.length > 0 && (() => {
+                          const latest = teamHistory[teamHistory.length - 1];
+                          const deptData = [
+                            { dept: "Engineering", count: latest.engineering_count || 0 },
+                            { dept: "Sales", count: latest.sales_count || 0 },
+                            { dept: "Ops", count: latest.ops_count || 0 },
+                          ].filter(d => d.count > 0);
+                          return deptData.length > 0 ? (
+                            <div className="glass-card rounded-xl p-5">
+                              <h3 className="font-semibold mb-4">Latest Department Breakdown</h3>
+                              <ResponsiveContainer width="100%" height={250}>
+                                <BarChart data={deptData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                                  <XAxis dataKey="dept" stroke={chartColors.muted} fontSize={12} />
+                                  <YAxis stroke={chartColors.muted} fontSize={12} />
+                                  <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                                  <Bar dataKey="count" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : null;
+                        })()}
+                      </>
+                    ) : <p className="text-muted-foreground">No team history data.</p>}
+                  </div>
+                )}
+
+                {activeTab === "metrics" && (
+                  <div>
+                    <h2 className="text-xl font-bold mb-5">Operational Metrics</h2>
+                    {metrics.length === 0 ? <p className="text-muted-foreground">No metrics recorded.</p> : (
+                      <div className="glass-card rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
+                            <th className="p-4 font-medium">Date</th>
+                            <th className="p-4 font-medium">Revenue</th>
+                            <th className="p-4 font-medium">Burn</th>
+                            <th className="p-4 font-medium">Runway</th>
+                            <th className="p-4 font-medium">Churn</th>
+                            <th className="p-4 font-medium">NPS</th>
+                            <th className="p-4 font-medium">Customers</th>
+                          </tr></thead>
+                          <tbody>
+                            {metrics.map((m: any) => (
+                              <tr key={m.metric_id} className="border-b border-border/30">
+                                <td className="p-4 font-medium text-foreground">{m.snapshot_date?.slice(0, 10)}</td>
+                                <td className="p-4 text-muted-foreground">{m.monthly_revenue_usd ? `$${Number(m.monthly_revenue_usd).toLocaleString()}` : "—"}</td>
+                                <td className="p-4 text-muted-foreground">{m.monthly_burn_usd ? `$${Number(m.monthly_burn_usd).toLocaleString()}` : "—"}</td>
+                                <td className="p-4 text-muted-foreground">{m.runway_months ? `${m.runway_months}mo` : "—"}</td>
+                                <td className="p-4 text-muted-foreground">{m.churn_rate_pct != null ? `${m.churn_rate_pct}%` : "—"}</td>
+                                <td className="p-4 text-muted-foreground">{m.nps_score ?? "—"}</td>
+                                <td className="p-4 text-muted-foreground">{m.customer_count?.toLocaleString() ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "health" && (
+                  <div className="space-y-6">
+                    <h2 className="text-xl font-bold">Health Score</h2>
+                    {healthScores.length === 0 ? <p className="text-muted-foreground">No health scores recorded.</p> : (
+                      <>
+                        <div className="glass-card rounded-xl p-5">
+                          <p className="text-sm text-muted-foreground mb-1">Latest Score Date: {latestHealth?.score_date?.slice(0, 10)}</p>
+                          {latestHealth?.risk_flag && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${latestHealth.risk_flag === "Green" ? "bg-success/15 text-success" : latestHealth.risk_flag === "Yellow" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"}`}>
+                              Risk: {latestHealth.risk_flag}
+                            </span>
+                          )}
+                          <ResponsiveContainer width="100%" height={350}>
+                            <RadarChart data={healthRadarData}>
+                              <PolarGrid stroke="hsl(217,33%,18%)" />
+                              <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
+                              <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
+                              <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.25} strokeWidth={2} />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "valuations" && (
+                  <div className="space-y-6">
+                    <h2 className="text-xl font-bold">Valuations</h2>
+                    {valuations.length === 0 ? <p className="text-muted-foreground">No valuations recorded.</p> : (
+                      <>
+                        <div className="glass-card rounded-xl p-5">
+                          <h3 className="font-semibold mb-4">Valuation Over Time ($M)</h3>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={valuationChartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                              <XAxis dataKey="date" stroke={chartColors.muted} fontSize={12} />
+                              <YAxis stroke={chartColors.muted} fontSize={12} />
+                              <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                              <Line type="monotone" dataKey="val" stroke={chartColors.secondary} strokeWidth={2} dot={{ r: 5, fill: chartColors.secondary }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="glass-card rounded-xl overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
+                              <th className="p-4 font-medium">Date</th>
+                              <th className="p-4 font-medium">Valuation</th>
+                              <th className="p-4 font-medium">Method</th>
+                              <th className="p-4 font-medium">Source</th>
+                            </tr></thead>
+                            <tbody>
+                              {valuations.map((v: any) => (
+                                <tr key={v.valuation_id} className="border-b border-border/30">
+                                  <td className="p-4 text-foreground">{v.valuation_date?.slice(0, 10)}</td>
+                                  <td className="p-4 text-muted-foreground">{v.valuation_usd ? `$${Number(v.valuation_usd).toLocaleString()}` : "—"}</td>
+                                  <td className="p-4 text-muted-foreground">{v.valuation_method || "—"}</td>
+                                  <td className="p-4 text-muted-foreground">{v.source || "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
           </div>
         </main>
       </div>
