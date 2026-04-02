@@ -117,10 +117,12 @@ function VaultCanvas() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, canvas.clientWidth / canvas.clientHeight, 0.1, 300);
-    camera.position.set(3.5, 1.5, 18);
+    const camera = new THREE.PerspectiveCamera(42, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
+    camera.position.set(0, 0.5, 16);
     camera.lookAt(0, 0, 0);
 
     const resize = () => {
@@ -131,379 +133,413 @@ function VaultCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    // ── Lighting ──────────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0x0d1020, 1.2));
+    // ── Materials ──────────────────────────────────────────────────────────────
+    const steelDark   = new THREE.MeshStandardMaterial({ color: 0x1c2030, metalness: 0.95, roughness: 0.20 });
+    const steelMid    = new THREE.MeshStandardMaterial({ color: 0x2e3340, metalness: 0.92, roughness: 0.22 });
+    const steelLight  = new THREE.MeshStandardMaterial({ color: 0x3d4255, metalness: 0.90, roughness: 0.25 });
+    const goldMat     = new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.00, roughness: 0.08, emissive: 0x3a2800, emissiveIntensity: 0.15 });
+    const goldDull    = new THREE.MeshStandardMaterial({ color: 0xa88838, metalness: 0.98, roughness: 0.18 });
+    const chromeMat   = new THREE.MeshStandardMaterial({ color: 0xd0d8e8, metalness: 1.00, roughness: 0.04 });
+    const dialFaceMat = new THREE.MeshStandardMaterial({ color: 0x0a0e18, metalness: 0.7,  roughness: 0.35 });
+    const blackMat    = new THREE.MeshStandardMaterial({ color: 0x060810, metalness: 0.5,  roughness: 0.5  });
 
-    // Key light — warm top-left front
-    const key = new THREE.DirectionalLight(0xfff4e0, 2.4);
-    key.position.set(8, 12, 14);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.near = 1;
-    key.shadow.camera.far = 60;
-    key.shadow.camera.left = -12;
-    key.shadow.camera.right = 12;
-    key.shadow.camera.top = 12;
-    key.shadow.camera.bottom = -12;
-    key.shadow.bias = -0.001;
-    scene.add(key);
+    // ── Lighting ───────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0x0d1020, 1.0));
 
-    // Gold rim — bounces warm gold from behind/left
-    const rim = new THREE.DirectionalLight(0xc9a84c, 1.2);
-    rim.position.set(-10, 3, -6);
-    scene.add(rim);
+    // Key light — warm top-right
+    const keyLight = new THREE.SpotLight(0xfff0cc, 3.5, 60, Math.PI / 5, 0.4, 1.2);
+    keyLight.position.set(10, 14, 16);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.bias = -0.001;
+    scene.add(keyLight);
 
-    // Interior fill — soft warm point inside vault opening
-    const fill = new THREE.PointLight(0xc9a84c, 1.4, 40);
-    fill.position.set(0, 0, 5);
-    scene.add(fill);
+    // Rim light — cool blue-purple from behind-left
+    const rimLight = new THREE.DirectionalLight(0x4466cc, 0.5);
+    rimLight.position.set(-12, 4, -8);
+    scene.add(rimLight);
+
+    // Gold fill — subtle warm fill from front
+    const fillLight = new THREE.PointLight(0xc9a84c, 0.9, 25);
+    fillLight.position.set(-3, 0, 8);
+    scene.add(fillLight);
 
     // Ground bounce
-    const ground = new THREE.DirectionalLight(0x1a2040, 0.5);
-    ground.position.set(0, -10, 5);
-    scene.add(ground);
+    const bounceLight = new THREE.PointLight(0x8866aa, 0.3, 20);
+    bounceLight.position.set(0, -8, 4);
+    scene.add(bounceLight);
 
-    // ── Materials ─────────────────────────────────────────────────────────────
-    const steelDark = new THREE.MeshStandardMaterial({ color: 0x1c2030, metalness: 0.92, roughness: 0.28 });
-    const steelMid  = new THREE.MeshStandardMaterial({ color: 0x252d3e, metalness: 0.88, roughness: 0.35 });
-    const steelBody = new THREE.MeshStandardMaterial({ color: 0x141824, metalness: 0.90, roughness: 0.30 });
-    const goldMat   = new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.0,  roughness: 0.12, emissive: 0x3a2500, emissiveIntensity: 0.2 });
-    const goldDimMat= new THREE.MeshStandardMaterial({ color: 0x9a7830, metalness: 0.95, roughness: 0.20 });
-    const interiorMat = new THREE.MeshStandardMaterial({ color: 0x0a0e18, metalness: 0.4, roughness: 0.9 });
-    const dialFaceMat = new THREE.MeshStandardMaterial({ color: 0x101520, metalness: 0.95, roughness: 0.18 });
-
-    // ── Vault group ───────────────────────────────────────────────────────────
+    // ── Scene root group ───────────────────────────────────────────────────────
     const vaultGroup = new THREE.Group();
-    // Slight 3/4 view angle — shift left so vault sits right of centre on page
-    vaultGroup.position.set(-1.0, 0, 0);
     scene.add(vaultGroup);
 
-    // ═══════════════════════════════════════════════════════════════════════
-    //  VAULT BODY — a thick box with open front face (the cavity)
-    // ═══════════════════════════════════════════════════════════════════════
-    const W = 6.0,  // width
-          H = 7.2,  // height
-          D = 4.8;  // depth — this is what makes it look like a real safe, not a book
-
+    // ── VAULT BODY (the thick casing behind the door) ──────────────────────────
     const bodyGroup = new THREE.Group();
     vaultGroup.add(bodyGroup);
 
-    // Back wall
-    const backWall = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.35), steelBody.clone());
-    backWall.position.set(0, 0, -D / 2 + 0.175);
-    backWall.castShadow = true; backWall.receiveShadow = true;
-    bodyGroup.add(backWall);
+    // Main thick body — deep dark steel box
+    const bodyW = 6.8, bodyH = 8.2, bodyD = 2.8;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), steelDark.clone());
+    body.position.z = -bodyD / 2 - 0.3;
+    body.castShadow = true; body.receiveShadow = true;
+    bodyGroup.add(body);
 
-    // Left wall
-    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, H, D), steelBody.clone());
-    leftWall.position.set(-W / 2 + 0.2, 0, 0);
-    leftWall.castShadow = true; leftWall.receiveShadow = true;
-    bodyGroup.add(leftWall);
+    // Body edge bevels — layered outlines for depth
+    const bodyEdge1 = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(bodyW + 0.05, bodyH + 0.05, bodyD + 0.05)),
+      new THREE.LineBasicMaterial({ color: 0x3a4060, transparent: true, opacity: 0.8 })
+    );
+    bodyEdge1.position.copy(body.position);
+    bodyGroup.add(bodyEdge1);
 
-    // Right wall
-    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, H, D), steelBody.clone());
-    rightWall.position.set(W / 2 - 0.2, 0, 0);
-    rightWall.castShadow = true; rightWall.receiveShadow = true;
-    bodyGroup.add(rightWall);
+    // Body surface panels — raised rectangular panels on body sides
+    const sidePanelMat = steelMid.clone();
+    const sidePanel = new THREE.Mesh(new THREE.BoxGeometry(bodyW - 0.6, bodyH - 0.6, 0.08), sidePanelMat);
+    sidePanel.position.z = body.position.z + bodyD / 2 + 0.04;
+    bodyGroup.add(sidePanel);
 
-    // Top wall
-    const topWall = new THREE.Mesh(new THREE.BoxGeometry(W, 0.4, D), steelBody.clone());
-    topWall.position.set(0, H / 2 - 0.2, 0);
-    topWall.castShadow = true; topWall.receiveShadow = true;
-    bodyGroup.add(topWall);
+    // ── DOOR FRAME (thick surround welded to body) ─────────────────────────────
+    const frameW = 6.2, frameH = 7.6, frameThick = 0.55, frameMat = steelLight.clone();
+    // Top bar
+    bodyGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(frameW, frameThick, 0.9), frameMat), { position: new THREE.Vector3(0, frameH / 2 - frameThick / 2, 0) }));
+    // Bottom bar
+    bodyGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(frameW, frameThick, 0.9), frameMat.clone()), { position: new THREE.Vector3(0, -(frameH / 2 - frameThick / 2), 0) }));
+    // Left bar
+    bodyGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(frameThick, frameH, 0.9), frameMat.clone()), { position: new THREE.Vector3(-(frameW / 2 - frameThick / 2), 0, 0) }));
+    // Right bar (bolt side)
+    bodyGroup.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(frameThick, frameH, 0.9), frameMat.clone()), { position: new THREE.Vector3(frameW / 2 - frameThick / 2, 0, 0) }));
 
-    // Bottom wall
-    const botWall = new THREE.Mesh(new THREE.BoxGeometry(W, 0.4, D), steelBody.clone());
-    botWall.position.set(0, -H / 2 + 0.2, 0);
-    botWall.castShadow = true; botWall.receiveShadow = true;
-    bodyGroup.add(botWall);
-
-    // Interior floor/ceiling/back — dark cavity
-    const cavity = new THREE.Mesh(new THREE.BoxGeometry(W - 0.82, H - 0.82, D - 0.4), interiorMat);
-    cavity.position.set(0, 0, 0);
-    bodyGroup.add(cavity);
-
-    // Interior shelves
-    const shelfMat = new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.6, roughness: 0.7 });
-    for (const sy of [-1.0, 0.8]) {
-      const shelf = new THREE.Mesh(new THREE.BoxGeometry(W - 1.0, 0.08, D - 0.6), shelfMat);
-      shelf.position.set(0, sy, 0);
-      bodyGroup.add(shelf);
+    // Gold frame trim edges
+    for (const [x, y, w, h] of [
+      [0, frameH / 2 - frameThick / 2, frameW, frameThick],
+      [0, -(frameH / 2 - frameThick / 2), frameW, frameThick],
+      [-(frameW / 2 - frameThick / 2), 0, frameThick, frameH],
+      [frameW / 2 - frameThick / 2, 0, frameThick, frameH],
+    ] as [number, number, number, number][]) {
+      const tl = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.02, h + 0.02, 0.92)),
+        new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.35 })
+      );
+      tl.position.set(x, y, 0);
+      bodyGroup.add(tl);
     }
 
-    // Body outer gold trim lines — edges along front face opening
-    const frontFrameGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(W + 0.06, H + 0.06, 0.12));
-    const frontFrame = new THREE.LineSegments(frontFrameGeo,
-      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.5 }));
-    frontFrame.position.z = D / 2;
-    bodyGroup.add(frontFrame);
-
-    // Body corner vertical gold strips
-    for (const [sx, ex] of [[-W / 2, 0.04], [W / 2, -0.04]] as [number, number][]) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06, H, 0.08), goldDimMat);
-      strip.position.set(sx + ex, 0, D / 2 - 0.04);
-      bodyGroup.add(strip);
-    }
-    for (const sy of [-H / 2, H / 2]) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(W, 0.06, 0.08), goldDimMat);
-      strip.position.set(0, sy, D / 2 - 0.04);
-      bodyGroup.add(strip);
-    }
-
-    // Bolt holes on body sides (right side) — cylindrical recesses
-    const holeRingMat = new THREE.MeshStandardMaterial({ color: 0x0a0d14, metalness: 0.6, roughness: 0.9 });
-    for (const by of [2.2, 0.7, -0.7, -2.2]) {
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.45, 20), holeRingMat);
-      hole.rotation.z = Math.PI / 2;
-      hole.position.set(W / 2 - 0.05, by, D / 2 - 0.6);
-      bodyGroup.add(hole);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  VAULT DOOR — thick slab hinged on left
-    // ═══════════════════════════════════════════════════════════════════════
+    // ── DOOR LEAF ──────────────────────────────────────────────────────────────
     const doorGroup = new THREE.Group();
-    // Hinge pivot at left edge of door, at z = D/2 (front face of body)
-    doorGroup.position.set(-W / 2 + 0.2, 0, D / 2);
     vaultGroup.add(doorGroup);
 
-    const doorThickness = 0.72;
-    const doorInnerX = W - 0.4; // slightly narrower than body opening
-
-    // Door body
-    const doorMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(doorInnerX, H - 0.4, doorThickness),
-      steelDark.clone()
+    // Door slab
+    const doorW = 5.6, doorH = 7.0, doorThick = 0.7;
+    const doorSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(doorW, doorH, doorThick),
+      new THREE.MeshStandardMaterial({ color: 0x1a1e2e, metalness: 0.93, roughness: 0.22 })
     );
-    doorMesh.position.set(doorInnerX / 2, 0, doorThickness / 2);
-    doorMesh.castShadow = true;
-    doorGroup.add(doorMesh);
+    doorSlab.castShadow = true; doorSlab.receiveShadow = true;
+    doorGroup.add(doorSlab);
 
-    // Door edge bevel highlight — gold
-    const doorEdgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(doorInnerX + 0.06, H - 0.34, doorThickness + 0.04));
-    const doorEdge = new THREE.LineSegments(doorEdgeGeo,
-      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.55 }));
-    doorEdge.position.set(doorInnerX / 2, 0, doorThickness / 2);
+    // Door edge gold line trim
+    const doorEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(doorW + 0.03, doorH + 0.03, doorThick + 0.03)),
+      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.55 })
+    );
     doorGroup.add(doorEdge);
 
-    // Door recessed panel
-    const panelW = doorInnerX - 1.0, panelH = H - 1.6, panelD = 0.10;
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, panelD), steelMid);
-    panel.position.set(doorInnerX / 2, 0, doorThickness + panelD / 2 - 0.01);
-    doorGroup.add(panel);
-    const panelEdge = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(panelW + 0.04, panelH + 0.04, panelD)),
-      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.28 })
+    // Inner recessed panel on door
+    const recessW = 4.2, recessH = 5.6, recessD = 0.12;
+    const recess = new THREE.Mesh(
+      new THREE.BoxGeometry(recessW, recessH, recessD),
+      new THREE.MeshStandardMaterial({ color: 0x0d1020, metalness: 0.85, roughness: 0.35 })
     );
-    panelEdge.position.copy(panel.position);
-    doorGroup.add(panelEdge);
+    recess.position.z = doorThick / 2 + recessD / 2 - 0.02;
+    doorGroup.add(recess);
 
-    // ── Combination lock dial system ────────────────────────────────────────
-    const dialCX = doorInnerX / 2, dialCZ = doorThickness + 0.01;
-
-    // Outer ring mount — thick ring flush with door
-    const mountRing = new THREE.Mesh(
-      new THREE.TorusGeometry(2.05, 0.14, 20, 100),
-      goldDimMat.clone()
+    // Recess bevel trim
+    const recessEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(recessW + 0.04, recessH + 0.04, recessD)),
+      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.25 })
     );
-    mountRing.position.set(dialCX, 0, dialCZ + 0.06);
-    doorGroup.add(mountRing);
+    recessEdge.position.copy(recess.position);
+    doorGroup.add(recessEdge);
 
-    // Spinning rings (3 concentric)
-    const rings: THREE.Mesh[] = [];
-    const ringRadii = [1.65, 1.22, 0.84];
-    for (let i = 0; i < 3; i++) {
-      const rMat = goldMat.clone();
-      rMat.transparent = true;
-      rMat.opacity = 0.75 - i * 0.14;
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(ringRadii[i], 0.055 - i * 0.008, 18, 120),
-        rMat
-      );
-      ring.position.set(dialCX, 0, dialCZ + 0.10 + i * 0.04);
-      doorGroup.add(ring);
-      rings.push(ring);
-    }
-
-    // Tick marks on outer ring
-    const tickMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.0, roughness: 0.1 });
-    for (let i = 0; i < 40; i++) {
-      const angle = (i / 40) * Math.PI * 2;
-      const isMain = i % 5 === 0;
-      const tick = new THREE.Mesh(
-        new THREE.BoxGeometry(isMain ? 0.05 : 0.03, isMain ? 0.22 : 0.12, 0.04),
-        tickMat
-      );
-      tick.position.set(
-        dialCX + Math.cos(angle) * 1.95,
-        Math.sin(angle) * 1.95,
-        dialCZ + 0.07
-      );
-      tick.rotation.z = angle;
-      doorGroup.add(tick);
-    }
-
-    // Dial face — main cylinder
-    const dialFace = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.72, 0.72, 0.20, 64),
-      dialFaceMat
-    );
-    dialFace.rotation.x = Math.PI / 2;
-    dialFace.position.set(dialCX, 0, dialCZ + 0.16);
-    doorGroup.add(dialFace);
-
-    // Dial rim ring
-    const dialRim = new THREE.Mesh(
-      new THREE.TorusGeometry(0.72, 0.06, 16, 80),
-      goldMat.clone()
-    );
-    dialRim.position.set(dialCX, 0, dialCZ + 0.26);
-    doorGroup.add(dialRim);
-
-    // Indicator needle
-    const needle = new THREE.Mesh(
-      new THREE.BoxGeometry(0.055, 0.52, 0.055),
-      new THREE.MeshStandardMaterial({ color: 0xe8d080, emissive: 0xc9a84c, emissiveIntensity: 0.6, metalness: 1.0, roughness: 0.05 })
-    );
-    needle.position.set(dialCX, 0, dialCZ + 0.30);
-    doorGroup.add(needle);
-
-    // Center hub
-    const hub = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.16, 0.18, 32),
-      goldMat.clone()
-    );
-    hub.rotation.x = Math.PI / 2;
-    hub.position.set(dialCX, 0, dialCZ + 0.30);
-    doorGroup.add(hub);
-
-    // ── Lock bolts — protruding cylinders on right edge ─────────────────────
-    const boltGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.80, 20);
-    for (const by of [2.2, 0.7, -0.7, -2.2]) {
-      const bolt = new THREE.Mesh(boltGeo, goldDimMat.clone());
+    // ── LOCKING BOLTS (right side — thick, cylindrical, protruding) ────────────
+    const boltPositionsY = [2.6, 1.1, -0.4, -1.9];
+    const boltMeshes: THREE.Mesh[] = [];
+    const boltGeo = new THREE.CylinderGeometry(0.175, 0.175, 1.4, 20);
+    for (const by of boltPositionsY) {
+      // Bolt cylinder
+      const bolt = new THREE.Mesh(boltGeo, goldDull.clone());
       bolt.rotation.z = Math.PI / 2;
-      bolt.position.set(doorInnerX + 0.10, by, doorThickness / 2);
+      bolt.position.set(doorW / 2 + 0.7, by, 0);
+      boltMeshes.push(bolt);
       doorGroup.add(bolt);
 
-      // Bolt tip cap
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), goldMat.clone());
-      cap.position.set(doorInnerX + 0.50, by, doorThickness / 2);
+      // Bolt end cap
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.185, 0.185, 0.08, 20),
+        chromeMat.clone()
+      );
+      cap.rotation.z = Math.PI / 2;
+      cap.position.set(doorW / 2 + 1.4, by, 0);
       doorGroup.add(cap);
+
+      // Bolt housing on door face
+      const housing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.26, 0.22, 20),
+        steelMid.clone()
+      );
+      housing.rotation.z = Math.PI / 2;
+      housing.position.set(doorW / 2 + 0.1, by, 0);
+      doorGroup.add(housing);
+
+      // Gold ring accent on housing
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.26, 0.025, 10, 30),
+        goldMat.clone()
+      );
+      ring.rotation.y = Math.PI / 2;
+      ring.position.set(doorW / 2 + 0.14, by, 0);
+      doorGroup.add(ring);
     }
 
-    // ── Hinges — left edge, 3 hinges ────────────────────────────────────────
-    const hingeBodyGeo = new THREE.BoxGeometry(0.30, 0.90, 0.30);
-    const hingeMat = new THREE.MeshStandardMaterial({ color: 0xb09840, metalness: 0.98, roughness: 0.12 });
-    for (const hy of [2.4, 0, -2.4]) {
-      const h = new THREE.Mesh(hingeBodyGeo, hingeMat);
-      h.position.set(-0.05, hy, doorThickness / 2);
-      doorGroup.add(h);
+    // Bolt guide rail (vertical bar on right side door face)
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 6.2, 0.18),
+      steelMid.clone()
+    );
+    rail.position.set(doorW / 2 + 0.06, 0.3, 0.05);
+    doorGroup.add(rail);
+
+    // ── HINGES (left side — thick, industrial) ─────────────────────────────────
+    const hingePositionsY = [2.8, -2.8];
+    for (const hy of hingePositionsY) {
+      // Hinge block
+      const hinge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 1.0, 1.0),
+        goldDull.clone()
+      );
+      hinge.position.set(-doorW / 2 - 0.25, hy, 0);
+      doorGroup.add(hinge);
 
       // Hinge pin
-      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 16), goldMat.clone());
-      pin.position.set(-0.05, hy, doorThickness / 2);
-      doorGroup.add(pin);
-    }
-
-    // ── Corner rivets ───────────────────────────────────────────────────────
-    const rivetMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.0, roughness: 0.08, emissive: 0x2a1800, emissiveIntensity: 0.3 });
-    for (const [rx, ry] of [
-      [doorInnerX * 0.2, H * 0.36],
-      [doorInnerX * 0.8, H * 0.36],
-      [doorInnerX * 0.2, -H * 0.36],
-      [doorInnerX * 0.8, -H * 0.36],
-    ] as [number, number][]) {
-      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), rivetMat);
-      rivet.position.set(rx, ry, doorThickness + 0.06);
-      doorGroup.add(rivet);
-
-      // Rivet ring
-      const rRing = new THREE.Mesh(
-        new THREE.TorusGeometry(0.18, 0.03, 8, 32),
-        goldDimMat.clone()
+      const pin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07, 0.07, 1.15, 12),
+        chromeMat.clone()
       );
-      rRing.position.copy(rivet.position);
-      doorGroup.add(rRing);
+      pin.position.set(-doorW / 2 - 0.25, hy, 0);
+      doorGroup.add(pin);
+
+      // Hinge rivet details
+      for (const rz of [-0.3, 0.3]) {
+        const rivet = new THREE.Mesh(
+          new THREE.SphereGeometry(0.065, 10, 10),
+          chromeMat.clone()
+        );
+        rivet.position.set(-doorW / 2 - 0.1, hy + rz, 0.52);
+        doorGroup.add(rivet);
+      }
     }
 
-    // ── Floating particles ───────────────────────────────────────────────────
-    const ptCount = 150;
+    // ── COMBINATION DIAL ASSEMBLY ──────────────────────────────────────────────
+    const dialGroup = new THREE.Group();
+    dialGroup.position.set(0, 0.4, doorThick / 2);
+    doorGroup.add(dialGroup);
+
+    // Outer bezel ring (thick chrome ring)
+    const bezel = new THREE.Mesh(
+      new THREE.TorusGeometry(1.28, 0.18, 24, 80),
+      chromeMat.clone()
+    );
+    dialGroup.add(bezel);
+
+    // Bezel inner ring (dark groove)
+    dialGroup.add(new THREE.Mesh(
+      new THREE.TorusGeometry(1.1, 0.06, 16, 60),
+      blackMat.clone()
+    ));
+
+    // Rotating dial face (will spin in animate)
+    const dialFace = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.08, 1.08, 0.14, 80),
+      dialFaceMat.clone()
+    );
+    dialFace.rotation.x = Math.PI / 2;
+    dialGroup.add(dialFace);
+
+    // Dial face tick marks and number rings
+    const tickMat = new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.0, roughness: 0.1, emissive: 0xc9a84c, emissiveIntensity: 0.08 });
+    for (let i = 0; i < 40; i++) {
+      const angle = (i / 40) * Math.PI * 2;
+      const isMajor = i % 5 === 0;
+      const len = isMajor ? 0.16 : 0.08;
+      const r = 0.90;
+      const tick = new THREE.Mesh(
+        new THREE.BoxGeometry(isMajor ? 0.025 : 0.015, len, 0.03),
+        tickMat.clone()
+      );
+      tick.position.set(Math.sin(angle) * r, Math.cos(angle) * r, 0.075);
+      tick.rotation.z = -angle;
+      dialFace.add(tick);
+    }
+
+    // Dial center knob
+    const knob = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.27, 0.28, 32),
+      new THREE.MeshStandardMaterial({ color: 0xc9a84c, metalness: 1.0, roughness: 0.06 })
+    );
+    knob.rotation.x = Math.PI / 2;
+    knob.position.z = 0.13;
+    dialGroup.add(knob);
+
+    // Knob grip ridges (lathe-style grooves)
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const ridge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.035, 0.035, 0.26),
+        new THREE.MeshStandardMaterial({ color: 0x9a7830, metalness: 0.95, roughness: 0.2 })
+      );
+      ridge.position.set(Math.cos(angle) * 0.24, Math.sin(angle) * 0.24, 0.13);
+      ridge.rotation.z = angle;
+      dialGroup.add(ridge);
+    }
+
+    // Indicator line (pointer at 12 o'clock on bezel)
+    const pointerGeo = new THREE.BoxGeometry(0.04, 0.22, 0.05);
+    const pointer = new THREE.Mesh(pointerGeo, new THREE.MeshStandardMaterial({ color: 0xffcc44, emissive: 0xffaa00, emissiveIntensity: 0.6, metalness: 0.8, roughness: 0.1 }));
+    pointer.position.set(0, 1.28, 0.02);
+    dialGroup.add(pointer);
+
+    // ── HANDLE ASSEMBLY (T-bar style) ─────────────────────────────────────────
+    const handleGroup = new THREE.Group();
+    handleGroup.position.set(1.6, -0.8, doorThick / 2);
+    doorGroup.add(handleGroup);
+
+    // Handle shaft (vertical bar)
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 1.4, 20),
+      chromeMat.clone()
+    );
+    handleGroup.add(shaft);
+
+    // Handle crossbar (horizontal T)
+    const crossbar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 0.85, 16),
+      chromeMat.clone()
+    );
+    crossbar.rotation.z = Math.PI / 2;
+    crossbar.position.y = 0.5;
+    handleGroup.add(crossbar);
+
+    // Handle end caps
+    for (const ex of [-0.425, 0.425]) {
+      const ecap = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), goldMat.clone());
+      ecap.position.set(ex, 0.5, 0);
+      handleGroup.add(ecap);
+    }
+
+    // Handle mounting base plate
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.45, 0.1),
+      goldDull.clone()
+    );
+    plate.position.set(0, -0.65, -0.08);
+    handleGroup.add(plate);
+
+    // ── CORNER BOLTS (decorative, all 4 corners) ───────────────────────────────
+    const cornerPositions: [number, number][] = [[-2.4, 3.1], [2.4, 3.1], [-2.4, -3.1], [2.4, -3.1]];
+    for (const [cx, cy] of cornerPositions) {
+      const boltHead = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.18, 0.16, 8),
+        goldMat.clone()
+      );
+      boltHead.rotation.x = Math.PI / 2;
+      boltHead.position.set(cx, cy, doorThick / 2 + 0.08);
+      doorGroup.add(boltHead);
+
+      // Hex outline
+      const hexEdge = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.2, 0.2, 0.16, 6)),
+        new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.5 })
+      );
+      hexEdge.rotation.x = Math.PI / 2;
+      hexEdge.position.set(cx, cy, doorThick / 2 + 0.08);
+      doorGroup.add(hexEdge);
+    }
+
+    // ── BRAND PLATE ────────────────────────────────────────────────────────────
+    const brandPlate = new THREE.Mesh(
+      new THREE.BoxGeometry(2.8, 0.38, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0x0a0d15, metalness: 0.7, roughness: 0.4 })
+    );
+    brandPlate.position.set(0, -2.9, doorThick / 2 + 0.02);
+    doorGroup.add(brandPlate);
+
+    const brandEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(2.85, 0.42, 0.05)),
+      new THREE.LineBasicMaterial({ color: 0xc9a84c, transparent: true, opacity: 0.4 })
+    );
+    brandEdge.position.copy(brandPlate.position);
+    doorGroup.add(brandEdge);
+
+    // ── FLOATING GOLD PARTICLES ────────────────────────────────────────────────
+    const ptCount = 90;
     const ptPos = new Float32Array(ptCount * 3);
     const ptVel: { x: number; y: number }[] = [];
     for (let i = 0; i < ptCount; i++) {
       ptPos[i * 3]     = (Math.random() - 0.5) * 22;
       ptPos[i * 3 + 1] = (Math.random() - 0.5) * 16;
-      ptPos[i * 3 + 2] = (Math.random() - 0.5) * 12 - 2;
-      ptVel.push({ x: (Math.random() - 0.5) * 0.007, y: (Math.random() - 0.5) * 0.007 });
+      ptPos[i * 3 + 2] = (Math.random() - 0.5) * 8 - 3;
+      ptVel.push({ x: (Math.random() - 0.5) * 0.006, y: (Math.random() - 0.5) * 0.006 });
     }
     const ptGeo = new THREE.BufferGeometry();
     ptGeo.setAttribute("position", new THREE.BufferAttribute(ptPos, 3));
-    const particles = new THREE.Points(ptGeo,
-      new THREE.PointsMaterial({ color: 0xc9a84c, size: 0.045, transparent: true, opacity: 0.45 }));
+    const particles = new THREE.Points(
+      ptGeo,
+      new THREE.PointsMaterial({ color: 0xc9a84c, size: 0.035, transparent: true, opacity: 0.45 })
+    );
     scene.add(particles);
 
-    // ── Ground shadow plane ──────────────────────────────────────────────────
-    const shadowPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(30, 20),
-      new THREE.ShadowMaterial({ opacity: 0.35 })
-    );
-    shadowPlane.rotation.x = -Math.PI / 2;
-    shadowPlane.position.y = -H / 2 - 0.22;
-    shadowPlane.receiveShadow = true;
-    scene.add(shadowPlane);
-
-    // ── Mouse interaction ────────────────────────────────────────────────────
-    // Default angle: slightly tilted so you see depth + top face clearly
-    let targetRotX = 0.18, targetRotY = 0.32;
-    let curRotX = 0.18, curRotY = 0.32;
+    // ── MOUSE INTERACTION ──────────────────────────────────────────────────────
+    let targetRotX = 0.06, targetRotY = 0.18, curRotX = 0.06, curRotY = 0.18;
     let hovering = false;
-
     const onMove = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
-      targetRotY = ((e.clientX - r.left) / r.width - 0.5) * 0.85 + 0.2;
-      targetRotX = -((e.clientY - r.top)  / r.height - 0.5) * 0.55 + 0.12;
+      targetRotY = ((e.clientX - r.left) / r.width - 0.5) * 0.55;
+      targetRotX = -((e.clientY - r.top) / r.height - 0.5) * 0.4;
       hovering = true;
     };
     const onLeave = () => { hovering = false; };
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
 
-    // ── Animation loop ────────────────────────────────────────────────────────
+    // ── ANIMATE ────────────────────────────────────────────────────────────────
     let t = 0, rafId: number;
     const animate = () => {
       rafId = requestAnimationFrame(animate);
-      t += 0.014;
+      t += 0.016;
 
-      // Smooth rotation follow
       curRotX += (targetRotX - curRotX) * 0.055;
       curRotY += (targetRotY - curRotY) * 0.055;
-      if (!hovering) targetRotY = Math.sin(t * 0.28) * 0.28 + 0.22;
-
+      if (!hovering) {
+        targetRotY = Math.sin(t * 0.25) * 0.2 + 0.12;
+        targetRotX = Math.sin(t * 0.18) * 0.04 + 0.04;
+      }
       vaultGroup.rotation.x = curRotX;
       vaultGroup.rotation.y = curRotY;
 
-      // Needle spin
-      needle.rotation.z = t * 0.75;
+      // Slowly spin dial face
+      dialFace.rotation.z = t * 0.18;
 
-      // Rings counter-rotate at different speeds
-      rings[0].rotation.z =  t * 0.18;
-      rings[1].rotation.z = -t * 0.12;
-      rings[2].rotation.z =  t * 0.08;
-      rings.forEach((r, i) => {
-        (r.material as THREE.MeshStandardMaterial).opacity =
-          0.60 + Math.sin(t * 1.1 + i * 1.4) * 0.18;
-      });
-
-      // Pulsing fill light
-      fill.intensity = 1.1 + Math.sin(t * 0.85) * 0.4;
+      // Pulsing gold fill
+      fillLight.intensity = 0.7 + Math.sin(t * 1.1) * 0.25;
+      fillLight.position.x = -3 + Math.sin(t * 0.4) * 1.5;
 
       // Particles drift
       const pos = particles.geometry.attributes.position.array as Float32Array;
       for (let i = 0; i < ptCount; i++) {
         pos[i * 3]     += ptVel[i].x;
         pos[i * 3 + 1] += ptVel[i].y;
-        if (Math.abs(pos[i * 3]) > 11)     ptVel[i].x *= -1;
-        if (Math.abs(pos[i * 3 + 1]) > 8)  ptVel[i].y *= -1;
+        if (Math.abs(pos[i * 3])     > 12) ptVel[i].x *= -1;
+        if (Math.abs(pos[i * 3 + 1]) > 9)  ptVel[i].y *= -1;
       }
       particles.geometry.attributes.position.needsUpdate = true;
 
