@@ -1,80 +1,131 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, Package, Handshake, Flag, Users, Activity, Shield, TrendingUp, Home, Menu, Loader2 } from "lucide-react";
-import {
-  LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
-} from "recharts";
-import StatusBadge from "@/components/StatusBadge";
+import { Database, Handshake, Home, Loader2, Menu, TrendingUp, UserRound } from "lucide-react";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageTransition from "@/components/PageTransition";
+import StatusBadge from "@/components/StatusBadge";
 import {
-  getStartups, getProducts, getDeals, getMilestones, getTeamHistory,
-  getMetrics, getHealthScores, getValuations
+  getDeals,
+  getDueDiligence,
+  getEquityRounds,
+  getFounders,
+  getHealthScores,
+  getIndustries,
+  getLocations,
+  getMetrics,
+  getMilestones,
+  getProducts,
+  getProductCategories,
+  getStartup,
+  getStartupCursorSummary,
+  getStartupStatusHistory,
+  getStartups,
+  getTeamHistory,
+  getValuations,
+  setupStartupDbLab,
+  updateStartup,
 } from "@/lib/api";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: Home },
-  { key: "products", label: "Products", icon: Package },
+  { key: "founders", label: "Founders", icon: UserRound },
   { key: "deals", label: "Deals", icon: Handshake },
-  { key: "milestones", label: "Milestones", icon: Flag },
-  { key: "team", label: "Team", icon: Users },
-  { key: "metrics", label: "Metrics", icon: Activity },
-  { key: "health", label: "Health Score", icon: Shield },
-  { key: "valuations", label: "Valuations", icon: TrendingUp },
-];
+  { key: "analytics", label: "Analytics", icon: TrendingUp },
+  { key: "db", label: "DB Lab", icon: Database },
+] as const;
 
 const chartColors = { primary: "hsl(217, 91%, 60%)", secondary: "hsl(160, 84%, 39%)", muted: "hsl(215, 20%, 55%)" };
+const startupStatuses = ["Active", "Acquired", "Shutdown", "IPO", "Dormant", "Pivoting"];
 
-const Spinner = () => (
-  <div className="flex justify-center items-center py-20">
-    <Loader2 size={28} className="animate-spin text-primary" />
-  </div>
-);
+const fmtMoney = (v?: string | number | null) => (v == null || v === "" ? "N/A" : `$${Number(v).toLocaleString()}`);
+const fmtDate = (v?: string | null) => v?.slice(0, 10) || "N/A";
+const yesNo = (v?: number | boolean | null) => (v ? "Yes" : "No");
 
 const FounderDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Current startup: take the first one from the list
+  const [loading, setLoading] = useState(true);
+  const [savingStatus, setSavingStatus] = useState(false);
   const [startup, setStartup] = useState<any>(null);
+  const [statusDraft, setStatusDraft] = useState("Active");
+  const [founders, setFounders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [milestones, setMilestones] = useState<any[]>([]);
-  const [teamHistory, setTeamHistory] = useState<any[]>([]);
+  const [dueDiligence, setDueDiligence] = useState<any[]>([]);
+  const [equityRounds, setEquityRounds] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
+  const [teamHistory, setTeamHistory] = useState<any[]>([]);
   const [healthScores, setHealthScores] = useState<any[]>([]);
   const [valuations, setValuations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [statusHistory, setStatusHistory] = useState<any[]>([]);
+  const [cursorSummary, setCursorSummary] = useState<any>(null);
+  const [dbMessage, setDbMessage] = useState("");
+  const [lookupCounts, setLookupCounts] = useState({ industries: 0, locations: 0, categories: 0 });
+
+  const refreshDbData = async (startupId: number) => {
+    const [startupRes, historyRes, cursorRes] = await Promise.all([
+      getStartup(startupId),
+      getStartupStatusHistory(startupId),
+      getStartupCursorSummary(startupId),
+    ]);
+    setStartup(startupRes.data);
+    setStatusDraft(startupRes.data?.status || "Active");
+    setStatusHistory(historyRes.data || []);
+    setCursorSummary(cursorRes.data || null);
+  };
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const [sRes, pRes, dRes, mRes, tRes, meRes, hRes, vRes] = await Promise.all([
+        const [sRes, fRes, pRes, dRes, mRes, ddRes, erRes, meRes, tRes, hRes, vRes, iRes, lRes, cRes] = await Promise.all([
           getStartups(),
+          getFounders(),
           getProducts(),
           getDeals(),
           getMilestones(),
-          getTeamHistory(),
+          getDueDiligence(),
+          getEquityRounds(),
           getMetrics(),
+          getTeamHistory(),
           getHealthScores(),
           getValuations(),
+          getIndustries(),
+          getLocations(),
+          getProductCategories(),
         ]);
+
         const firstStartup = (sRes.data || [])[0];
         setStartup(firstStartup);
+        setStatusDraft(firstStartup?.status || "Active");
+        setLookupCounts({
+          industries: (iRes.data || []).length,
+          locations: (lRes.data || []).length,
+          categories: (cRes.data || []).length,
+        });
 
-        if (firstStartup) {
-          const sid = firstStartup.startup_id;
-          setProducts((pRes.data || []).filter((p: any) => p.startup_id === sid));
-          setDeals((dRes.data || []).filter((d: any) => d.startup_id === sid));
-          setMilestones((mRes.data || []).filter((m: any) => m.startup_id === sid));
-          setTeamHistory((tRes.data || []).filter((t: any) => t.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
-          setMetrics((meRes.data || []).filter((m: any) => m.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
-          setHealthScores((hRes.data || []).filter((h: any) => h.startup_id === sid));
-          setValuations((vRes.data || []).filter((v: any) => v.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
+        if (!firstStartup) return;
+        const sid = firstStartup.startup_id;
+        setFounders((fRes.data || []).filter((x: any) => x.startup_id === sid));
+        setProducts((pRes.data || []).filter((x: any) => x.startup_id === sid));
+        setDeals((dRes.data || []).filter((x: any) => x.startup_id === sid));
+        setMilestones((mRes.data || []).filter((x: any) => x.startup_id === sid));
+        setDueDiligence((ddRes.data || []).filter((x: any) => x.startup_id === sid));
+        setEquityRounds((erRes.data || []).filter((x: any) => x.startup_id === sid));
+        setMetrics((meRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
+        setTeamHistory((tRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
+        setHealthScores((hRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => b.score_date.localeCompare(a.score_date)));
+        setValuations((vRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
+
+        try {
+          const [setupRes] = await Promise.all([setupStartupDbLab(), refreshDbData(sid)]);
+          setDbMessage(setupRes.message || "Trigger and cursor are ready.");
+        } catch (dbError: any) {
+          setDbMessage(dbError?.response?.data?.message || "Database lab setup is unavailable.");
         }
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -84,335 +135,275 @@ const FounderDashboard = () => {
 
   const latestMetric = metrics[metrics.length - 1];
   const latestHealth = healthScores[0];
-  const healthRadarData = latestHealth ? [
-    { subject: "Financial", A: latestHealth.financial_score || 0 },
-    { subject: "Team", A: latestHealth.team_score || 0 },
-    { subject: "Product", A: latestHealth.product_score || 0 },
-    { subject: "Market", A: latestHealth.market_score || 0 },
-    { subject: "Overall", A: latestHealth.overall_score || 0 },
+  const revenueData = metrics.map((x: any) => ({ month: x.snapshot_date?.slice(0, 7), revenue: Number(x.monthly_revenue_usd || 0), burn: Number(x.monthly_burn_usd || 0) }));
+  const valuationData = valuations.map((x: any) => ({ date: x.valuation_date?.slice(0, 10), value: Number(x.valuation_usd || 0) / 1e6 }));
+  const teamData = teamHistory.map((x: any) => ({ month: x.record_date?.slice(0, 7), count: Number(x.total_headcount || 0) }));
+  const roundData = equityRounds.map((x: any) => ({ round: x.round_type, amount: Number(x.amount_raised_usd || 0) / 1e6 }));
+  const radarData = latestHealth ? [
+    { subject: "Financial", score: latestHealth.financial_score || 0 },
+    { subject: "Team", score: latestHealth.team_score || 0 },
+    { subject: "Product", score: latestHealth.product_score || 0 },
+    { subject: "Market", score: latestHealth.market_score || 0 },
+    { subject: "Overall", score: latestHealth.overall_score || 0 },
   ] : [];
 
-  const revenueChartData = metrics.map((m: any) => ({
-    month: m.snapshot_date?.slice(0, 7),
-    revenue: m.monthly_revenue_usd || 0,
-    burn: m.monthly_burn_usd || 0,
-  }));
+  const handleStatusUpdate = async () => {
+    if (!startup || statusDraft === startup.status) return;
+    try {
+      setSavingStatus(true);
+      await setupStartupDbLab();
+      await updateStartup(startup.startup_id, {
+        startup_name: startup.startup_name,
+        tagline: startup.tagline,
+        industry_id: startup.industry_id,
+        location_id: startup.location_id,
+        website: startup.website,
+        founded_year: startup.founded_year,
+        registration_number: startup.registration_number,
+        annual_revenue_usd: startup.annual_revenue_usd,
+        profit_loss_usd: startup.profit_loss_usd,
+        num_employees: startup.num_employees,
+        total_funding_usd: startup.total_funding_usd,
+        status: statusDraft,
+      });
+      await refreshDbData(startup.startup_id);
+      setDbMessage("Status updated. The trigger inserted a new history row automatically.");
+    } catch (error: any) {
+      setDbMessage(error?.response?.data?.message || "Status update failed.");
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
-  const teamChartData = teamHistory.map((t: any) => ({
-    month: t.record_date?.slice(0, 7),
-    count: t.total_headcount || 0,
-  }));
+  const StatCard = ({ label, value }: { label: string; value: string | number }) => (
+    <div className="glass-card rounded-xl p-5">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
+    </div>
+  );
 
-  const valuationChartData = valuations.map((v: any) => ({
-    date: v.valuation_date?.slice(0, 10),
-    val: v.valuation_usd ? (v.valuation_usd / 1e6) : 0,
-  }));
+  const Table = ({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) => (
+    <div className="glass-card rounded-xl overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border/50 text-left text-muted-foreground">
+            {headers.map((header) => <th key={header} className="p-4 font-medium">{header}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index} className="border-b border-border/30">
+              {row.map((cell, cellIndex) => <td key={cellIndex} className={`p-4 ${cellIndex === 0 ? "text-foreground" : "text-muted-foreground"}`}>{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <PageTransition>
       <div className="min-h-screen flex">
-        {/* Sidebar */}
         <aside className={`${sidebarOpen ? "w-60" : "w-0 overflow-hidden"} transition-all duration-300 border-r border-border/50 bg-card shrink-0`}>
           <div className="p-5 border-b border-border/50">
             <h2 className="text-lg font-bold"><span className="gradient-text">Vault</span>Bridge</h2>
             <p className="text-xs text-muted-foreground mt-1">Founder Dashboard</p>
           </div>
           <nav className="p-3 space-y-1">
-            {tabs.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${activeTab === t.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"}`}
-              >
-                <t.icon size={16} /> {t.label}
+            {tabs.map((tab) => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${activeTab === tab.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"}`}>
+                <tab.icon size={16} /> {tab.label}
               </button>
             ))}
           </nav>
         </aside>
 
-        {/* Main */}
         <main className="flex-1 min-w-0">
           <header className="h-14 border-b border-border/50 flex items-center px-5 gap-4">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground hover:text-foreground">
-              <Menu size={20} />
-            </button>
-            <h1 className="text-lg font-semibold">{startup?.startup_name || "Loading..."}</h1>
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground hover:text-foreground"><Menu size={20} /></button>
+            <h1 className="text-lg font-semibold">{startup?.startup_name || "Founder Dashboard"}</h1>
             {startup && <StatusBadge status={startup.status} />}
           </header>
 
           <div className="p-6">
             {loading ? (
-              <Spinner />
+              <div className="flex justify-center items-center py-20"><Loader2 size={28} className="animate-spin text-primary" /></div>
             ) : (
-              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="space-y-6">
                 {activeTab === "overview" && (
-                  <div className="space-y-6">
-                    <div className="grid sm:grid-cols-3 gap-5">
-                      <div className="glass-card rounded-xl p-5">
-                        <p className="text-sm text-muted-foreground">Monthly Revenue</p>
-                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.monthly_revenue_usd ? `$${Number(latestMetric.monthly_revenue_usd).toLocaleString()}` : "N/A"}</p>
-                      </div>
-                      <div className="glass-card rounded-xl p-5">
-                        <p className="text-sm text-muted-foreground">Monthly Burn</p>
-                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.monthly_burn_usd ? `$${Number(latestMetric.monthly_burn_usd).toLocaleString()}` : "N/A"}</p>
-                      </div>
-                      <div className="glass-card rounded-xl p-5">
-                        <p className="text-sm text-muted-foreground">Runway</p>
-                        <p className="text-2xl font-bold mt-1 text-foreground">{latestMetric?.runway_months ? `${latestMetric.runway_months} months` : "N/A"}</p>
-                      </div>
+                  <>
+                    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                      <StatCard label="Industry" value={startup?.industry_name || "N/A"} />
+                      <StatCard label="Location" value={startup?.location_display || "N/A"} />
+                      <StatCard label="Latest Revenue" value={fmtMoney(latestMetric?.monthly_revenue_usd)} />
+                      <StatCard label="Lookup APIs Used" value={lookupCounts.industries + lookupCounts.locations + lookupCounts.categories} />
                     </div>
-                    {revenueChartData.length > 0 && (
+                    <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+                      <StatCard label="Founders API" value={founders.length} />
+                      <StatCard label="Products API" value={products.length} />
+                      <StatCard label="Deals API" value={deals.length} />
+                      <StatCard label="Milestones API" value={milestones.length} />
+                      <StatCard label="Due Diligence API" value={dueDiligence.length} />
+                      <StatCard label="Equity Rounds API" value={equityRounds.length} />
+                    </div>
+                    <div className="glass-card rounded-xl p-5">
+                      <h3 className="font-semibold mb-4">Revenue vs Burn</h3>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <AreaChart data={revenueData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                          <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
+                          <YAxis stroke={chartColors.muted} fontSize={12} />
+                          <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                          <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.12} />
+                          <Area type="monotone" dataKey="burn" stroke={chartColors.secondary} fill={chartColors.secondary} fillOpacity={0.12} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                )}
+
+                {activeTab === "founders" && (
+                  founders.length === 0 ? <p className="text-muted-foreground">No founders linked to this startup.</p> : (
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      {founders.map((founder: any) => (
+                        <div key={`${founder.founder_id}-${founder.startup_id}`} className="glass-card rounded-xl p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="font-semibold text-foreground">{founder.first_name} {founder.last_name}</h3>
+                              <p className="text-sm text-muted-foreground">{founder.role || "Founder"}</p>
+                            </div>
+                            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">{founder.equity_percentage != null ? `${founder.equity_percentage}% equity` : "Equity N/A"}</span>
+                          </div>
+                          <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                            <p>Email: {founder.email || "N/A"}</p>
+                            <p>Phone: {founder.phone || "N/A"}</p>
+                            <p>Nationality: {founder.nationality || "N/A"}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {activeTab === "deals" && (
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="space-y-4">
+                      {deals.length === 0 ? <p className="text-muted-foreground">No deals found.</p> : deals.map((deal: any) => (
+                        <div key={deal.deal_id} className="glass-card rounded-xl p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="font-semibold text-foreground">{deal.startup_name}</h3>
+                              <p className="text-sm text-muted-foreground">{deal.sharks || "No sharks linked"}</p>
+                            </div>
+                            <StatusBadge status={deal.deal_status} />
+                          </div>
+                          <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-muted-foreground">
+                            <p>Amount: {fmtMoney(deal.deal_amount_usd)}</p>
+                            <p>Equity: {deal.deal_equity_percent != null ? `${deal.deal_equity_percent}%` : "N/A"}</p>
+                            <p>Type: {deal.deal_type || "N/A"}</p>
+                            <p>Date: {fmtDate(deal.handshake_date)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Table
+                      headers={["Conducted By", "Status", "Financial", "Legal", "IP"]}
+                      rows={dueDiligence.length === 0 ? [["No due diligence rows", "-", "-", "-", "-"]] : dueDiligence.map((x) => [x.conducted_by || "Team", x.dd_status || "N/A", yesNo(x.financial_verified), yesNo(x.legal_cleared), yesNo(x.ip_verified)])}
+                    />
+                  </div>
+                )}
+
+                {activeTab === "analytics" && (
+                  <>
+                    <div className="grid gap-5 xl:grid-cols-2">
                       <div className="glass-card rounded-xl p-5">
-                        <h3 className="font-semibold mb-4">Revenue vs Burn Rate</h3>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <AreaChart data={revenueChartData}>
+                        <h3 className="font-semibold mb-4">Valuation Trend ($M)</h3>
+                        <ResponsiveContainer width="100%" height={260}>
+                          <LineChart data={valuationData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                            <XAxis dataKey="date" stroke={chartColors.muted} fontSize={12} />
+                            <YAxis stroke={chartColors.muted} fontSize={12} />
+                            <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                            <Line type="monotone" dataKey="value" stroke={chartColors.secondary} strokeWidth={2} dot={{ r: 4, fill: chartColors.secondary }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-4">Team Headcount</h3>
+                        <ResponsiveContainer width="100%" height={260}>
+                          <LineChart data={teamData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
                             <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
                             <YAxis stroke={chartColors.muted} fontSize={12} />
                             <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                            <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.1} />
-                            <Area type="monotone" dataKey="burn" stroke={chartColors.secondary} fill={chartColors.secondary} fillOpacity={0.1} />
-                          </AreaChart>
+                            <Line type="monotone" dataKey="count" stroke={chartColors.primary} strokeWidth={2} dot={{ r: 4, fill: chartColors.primary }} />
+                          </LineChart>
                         </ResponsiveContainer>
                       </div>
-                    )}
-                    {healthRadarData.length > 0 && (
+                    </div>
+                    <div className="grid gap-5 xl:grid-cols-2">
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-4">Funding Rounds ($M)</h3>
+                        <ResponsiveContainer width="100%" height={260}>
+                          <BarChart data={roundData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                            <XAxis dataKey="round" stroke={chartColors.muted} fontSize={12} />
+                            <YAxis stroke={chartColors.muted} fontSize={12} />
+                            <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                            <Bar dataKey="amount" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                       <div className="glass-card rounded-xl p-5">
                         <h3 className="font-semibold mb-4">Health Score</h3>
-                        <ResponsiveContainer width="100%" height={280}>
-                          <RadarChart data={healthRadarData}>
-                            <PolarGrid stroke="hsl(217,33%,18%)" />
-                            <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
-                            <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
-                            <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.2} />
-                          </RadarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "products" && (
-                  <div>
-                    <h2 className="text-xl font-bold mb-5">Products</h2>
-                    {products.length === 0 ? <p className="text-muted-foreground">No products found.</p> : (
-                      <div className="glass-card rounded-xl overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                            <th className="p-4 font-medium">Product</th>
-                            <th className="p-4 font-medium">Category</th>
-                            <th className="p-4 font-medium">Unit Price</th>
-                            <th className="p-4 font-medium">Units Sold</th>
-                            <th className="p-4 font-medium">Patented</th>
-                            <th className="p-4 font-medium">Launch Date</th>
-                          </tr></thead>
-                          <tbody>
-                            {products.map((p: any) => (
-                              <tr key={p.product_id} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
-                                <td className="p-4 font-medium text-foreground">{p.product_name}</td>
-                                <td className="p-4 text-muted-foreground">{p.category_name || "—"}</td>
-                                <td className="p-4 text-muted-foreground">{p.unit_price_usd ? `$${p.unit_price_usd}` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{p.units_sold?.toLocaleString() ?? "—"}</td>
-                                <td className="p-4">{p.is_patented ? <span className="text-success text-xs">✓ Yes</span> : <span className="text-muted-foreground text-xs">No</span>}</td>
-                                <td className="p-4 text-muted-foreground">{p.launch_date?.slice(0, 10) || "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "deals" && (
-                  <div>
-                    <h2 className="text-xl font-bold mb-5">Deals</h2>
-                    {deals.length === 0 ? <p className="text-muted-foreground">No deals found.</p> : (
-                      <div className="space-y-4">
-                        {deals.map((d: any) => (
-                          <div key={d.deal_id} className="glass-card glass-card-hover rounded-xl p-5 flex items-center justify-between">
-                            <div>
-                              <h3 className="font-semibold text-foreground">{d.sharks || "Unknown Investor"}</h3>
-                              <p className="text-sm text-muted-foreground">{d.deal_type} · {d.deal_equity_percent}% equity</p>
-                              {d.handshake_date && <p className="text-xs text-muted-foreground">{d.handshake_date?.slice(0, 10)}</p>}
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-foreground">{d.deal_amount_usd ? `$${Number(d.deal_amount_usd).toLocaleString()}` : "—"}</p>
-                              <StatusBadge status={d.deal_status} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "milestones" && (
-                  <div>
-                    <h2 className="text-xl font-bold mb-5">Milestones</h2>
-                    {milestones.length === 0 ? <p className="text-muted-foreground">No milestones found.</p> : (
-                      <div className="relative ml-4 border-l-2 border-border/50 space-y-6 pl-8">
-                        {milestones.map((m: any, i: number) => (
-                          <motion.div key={m.milestone_id || i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }} className="relative">
-                            <div className="absolute -left-[2.55rem] top-1 w-4 h-4 rounded-full bg-primary border-2 border-background" />
-                            <div className="glass-card rounded-xl p-4">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold text-foreground">{m.description || m.milestone_type}</h3>
-                                {m.verified ? <span className="text-xs bg-success/15 text-success px-2 py-0.5 rounded-full">Verified</span> : null}
-                              </div>
-                              <p className="text-sm text-muted-foreground">{m.milestone_date?.slice(0, 10)} · {m.milestone_type}</p>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "team" && (
-                  <div className="space-y-6">
-                    <h2 className="text-xl font-bold">Team</h2>
-                    {teamChartData.length > 0 ? (
-                      <>
-                        <div className="glass-card rounded-xl p-5">
-                          <h3 className="font-semibold mb-4">Headcount Over Time</h3>
-                          <ResponsiveContainer width="100%" height={280}>
-                            <LineChart data={teamChartData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                              <XAxis dataKey="month" stroke={chartColors.muted} fontSize={12} />
-                              <YAxis stroke={chartColors.muted} fontSize={12} />
-                              <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                              <Line type="monotone" dataKey="count" stroke={chartColors.primary} strokeWidth={2} dot={{ r: 4, fill: chartColors.primary }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                        {teamHistory.length > 0 && (() => {
-                          const latest = teamHistory[teamHistory.length - 1];
-                          const deptData = [
-                            { dept: "Engineering", count: latest.engineering_count || 0 },
-                            { dept: "Sales", count: latest.sales_count || 0 },
-                            { dept: "Ops", count: latest.ops_count || 0 },
-                          ].filter(d => d.count > 0);
-                          return deptData.length > 0 ? (
-                            <div className="glass-card rounded-xl p-5">
-                              <h3 className="font-semibold mb-4">Latest Department Breakdown</h3>
-                              <ResponsiveContainer width="100%" height={250}>
-                                <BarChart data={deptData}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                                  <XAxis dataKey="dept" stroke={chartColors.muted} fontSize={12} />
-                                  <YAxis stroke={chartColors.muted} fontSize={12} />
-                                  <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                                  <Bar dataKey="count" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          ) : null;
-                        })()}
-                      </>
-                    ) : <p className="text-muted-foreground">No team history data.</p>}
-                  </div>
-                )}
-
-                {activeTab === "metrics" && (
-                  <div>
-                    <h2 className="text-xl font-bold mb-5">Operational Metrics</h2>
-                    {metrics.length === 0 ? <p className="text-muted-foreground">No metrics recorded.</p> : (
-                      <div className="glass-card rounded-xl overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                            <th className="p-4 font-medium">Date</th>
-                            <th className="p-4 font-medium">Revenue</th>
-                            <th className="p-4 font-medium">Burn</th>
-                            <th className="p-4 font-medium">Runway</th>
-                            <th className="p-4 font-medium">Churn</th>
-                            <th className="p-4 font-medium">NPS</th>
-                            <th className="p-4 font-medium">Customers</th>
-                          </tr></thead>
-                          <tbody>
-                            {metrics.map((m: any) => (
-                              <tr key={m.metric_id} className="border-b border-border/30">
-                                <td className="p-4 font-medium text-foreground">{m.snapshot_date?.slice(0, 10)}</td>
-                                <td className="p-4 text-muted-foreground">{m.monthly_revenue_usd ? `$${Number(m.monthly_revenue_usd).toLocaleString()}` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{m.monthly_burn_usd ? `$${Number(m.monthly_burn_usd).toLocaleString()}` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{m.runway_months ? `${m.runway_months}mo` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{m.churn_rate_pct != null ? `${m.churn_rate_pct}%` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{m.nps_score ?? "—"}</td>
-                                <td className="p-4 text-muted-foreground">{m.customer_count?.toLocaleString() ?? "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "health" && (
-                  <div className="space-y-6">
-                    <h2 className="text-xl font-bold">Health Score</h2>
-                    {healthScores.length === 0 ? <p className="text-muted-foreground">No health scores recorded.</p> : (
-                      <>
-                        <div className="glass-card rounded-xl p-5">
-                          <p className="text-sm text-muted-foreground mb-1">Latest Score Date: {latestHealth?.score_date?.slice(0, 10)}</p>
-                          {latestHealth?.risk_flag && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${latestHealth.risk_flag === "Green" ? "bg-success/15 text-success" : latestHealth.risk_flag === "Yellow" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"}`}>
-                              Risk: {latestHealth.risk_flag}
-                            </span>
-                          )}
-                          <ResponsiveContainer width="100%" height={350}>
-                            <RadarChart data={healthRadarData}>
+                        {radarData.length === 0 ? <p className="text-sm text-muted-foreground">No health score records found.</p> : (
+                          <ResponsiveContainer width="100%" height={260}>
+                            <RadarChart data={radarData}>
                               <PolarGrid stroke="hsl(217,33%,18%)" />
                               <PolarAngleAxis dataKey="subject" stroke={chartColors.muted} fontSize={12} />
                               <PolarRadiusAxis angle={30} domain={[0, 100]} stroke={chartColors.muted} fontSize={10} />
-                              <Radar dataKey="A" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.25} strokeWidth={2} />
+                              <Radar dataKey="score" stroke={chartColors.primary} fill={chartColors.primary} fillOpacity={0.22} />
                             </RadarChart>
                           </ResponsiveContainer>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
 
-                {activeTab === "valuations" && (
-                  <div className="space-y-6">
-                    <h2 className="text-xl font-bold">Valuations</h2>
-                    {valuations.length === 0 ? <p className="text-muted-foreground">No valuations recorded.</p> : (
-                      <>
-                        <div className="glass-card rounded-xl p-5">
-                          <h3 className="font-semibold mb-4">Valuation Over Time ($M)</h3>
-                          <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={valuationChartData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                              <XAxis dataKey="date" stroke={chartColors.muted} fontSize={12} />
-                              <YAxis stroke={chartColors.muted} fontSize={12} />
-                              <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                              <Line type="monotone" dataKey="val" stroke={chartColors.secondary} strokeWidth={2} dot={{ r: 5, fill: chartColors.secondary }} />
-                            </LineChart>
-                          </ResponsiveContainer>
+                {activeTab === "db" && (
+                  <>
+                    <div className="grid gap-5 xl:grid-cols-2">
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-3">Trigger Demo</h3>
+                        <p className="text-sm text-muted-foreground mb-4">Updating the startup status runs a MySQL trigger that inserts a row into `startup_status_history`.</p>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <select value={statusDraft} onChange={(e) => setStatusDraft(e.target.value)} className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground">
+                            {startupStatuses.map((status) => <option key={status}>{status}</option>)}
+                          </select>
+                          <button onClick={handleStatusUpdate} disabled={savingStatus || !startup} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-70">
+                            {savingStatus ? "Updating..." : "Update Status"}
+                          </button>
                         </div>
-                        <div className="glass-card rounded-xl overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead><tr className="border-b border-border/50 text-muted-foreground text-left">
-                              <th className="p-4 font-medium">Date</th>
-                              <th className="p-4 font-medium">Valuation</th>
-                              <th className="p-4 font-medium">Method</th>
-                              <th className="p-4 font-medium">Source</th>
-                            </tr></thead>
-                            <tbody>
-                              {valuations.map((v: any) => (
-                                <tr key={v.valuation_id} className="border-b border-border/30">
-                                  <td className="p-4 text-foreground">{v.valuation_date?.slice(0, 10)}</td>
-                                  <td className="p-4 text-muted-foreground">{v.valuation_usd ? `$${Number(v.valuation_usd).toLocaleString()}` : "—"}</td>
-                                  <td className="p-4 text-muted-foreground">{v.valuation_method || "—"}</td>
-                                  <td className="p-4 text-muted-foreground">{v.source || "—"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <p className="mt-3 text-xs text-muted-foreground">Current status: {startup?.status || "N/A"}</p>
+                      </div>
+                      <div className="glass-card rounded-xl p-5">
+                        <h3 className="font-semibold mb-3">Cursor Demo</h3>
+                        <p className="text-sm text-muted-foreground mb-4">A stored procedure uses a MySQL cursor to loop through metrics and return an aggregate summary.</p>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div><p className="text-muted-foreground">Snapshots</p><p className="mt-1 font-semibold">{cursorSummary?.snapshots_processed ?? 0}</p></div>
+                          <div><p className="text-muted-foreground">Avg Runway</p><p className="mt-1 font-semibold">{cursorSummary?.average_runway_months != null ? `${cursorSummary.average_runway_months} months` : "N/A"}</p></div>
+                          <div><p className="text-muted-foreground">Total Revenue</p><p className="mt-1 font-semibold">{fmtMoney(cursorSummary?.total_revenue_usd)}</p></div>
+                          <div><p className="text-muted-foreground">Total Burn</p><p className="mt-1 font-semibold">{fmtMoney(cursorSummary?.total_burn_usd)}</p></div>
                         </div>
-                      </>
-                    )}
-                  </div>
+                        <p className="mt-4 text-sm text-primary">{dbMessage}</p>
+                      </div>
+                    </div>
+                    <Table
+                      headers={["Date", "Previous", "New", "Changed By", "Reason"]}
+                      rows={statusHistory.length === 0 ? [["No trigger rows yet", "-", "-", "-", "-"]] : statusHistory.map((x) => [fmtDate(x.changed_date), x.previous_status || "N/A", x.new_status, x.changed_by || "N/A", x.reason || "N/A"])}
+                    />
+                  </>
                 )}
               </motion.div>
             )}
