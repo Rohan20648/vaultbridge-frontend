@@ -5,7 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PageTransition from "@/components/PageTransition";
 import StatusBadge from "@/components/StatusBadge";
-import { getStartups, getSharks, getIndustries } from "@/lib/api";
+import { getIndustries, getShark, getSharks, getStartup, getStartups } from "@/lib/api";
 
 const statuses = ["All", "Active", "IPO", "Acquired", "Dormant", "Shutdown", "Pivoting"];
 
@@ -21,6 +21,7 @@ const ExplorePage = () => {
   const [selectedInvestor, setSelectedInvestor] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -57,6 +58,32 @@ const ExplorePage = () => {
     `${inv.first_name} ${inv.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
     (inv.company_name || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleStartupSelect = async (startup: any) => {
+    try {
+      setModalLoading(true);
+      setSelectedStartup(startup);
+      const startupRes = await getStartup(startup.startup_id);
+      setSelectedStartup({ ...startup, ...(startupRes.data || {}) });
+    } catch {
+      setSelectedStartup(startup);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleInvestorSelect = async (investor: any) => {
+    try {
+      setModalLoading(true);
+      setSelectedInvestor(investor);
+      const investorRes = await getShark(investor.shark_id);
+      setSelectedInvestor({ ...investor, ...(investorRes.data || {}) });
+    } catch {
+      setSelectedInvestor(investor);
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   return (
     <>
@@ -121,7 +148,7 @@ const ExplorePage = () => {
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    onClick={() => setSelectedStartup(s)}
+                    onClick={() => handleStartupSelect(s)}
                     className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -146,7 +173,7 @@ const ExplorePage = () => {
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    onClick={() => setSelectedInvestor(inv)}
+                    onClick={() => handleInvestorSelect(inv)}
                     className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
                   >
                     <div className="flex items-center gap-4 mb-4">
@@ -179,6 +206,7 @@ const ExplorePage = () => {
                   </div>
                   <button onClick={() => setSelectedStartup(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
                 </div>
+                {modalLoading && <div className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Fetching latest startup details...</div>}
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Industry</span><p className="font-medium text-foreground">{selectedStartup.industry_name || "—"}</p></div>
                   <div><span className="text-muted-foreground">Status</span><p><StatusBadge status={selectedStartup.status} /></p></div>
@@ -210,12 +238,28 @@ const ExplorePage = () => {
                   </div>
                   <button onClick={() => setSelectedInvestor(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
                 </div>
+                {modalLoading && <div className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Fetching latest investor details...</div>}
                 {selectedInvestor.bio && <p className="text-sm text-muted-foreground mb-4">{selectedInvestor.bio}</p>}
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Type</span><p className="font-medium text-foreground">{selectedInvestor.company_type || "—"}</p></div>
                   <div><span className="text-muted-foreground">Net Worth</span><p className="font-medium text-foreground">{selectedInvestor.net_worth_usd_millions ? `$${selectedInvestor.net_worth_usd_millions}M` : "—"}</p></div>
                   <div><span className="text-muted-foreground">Nationality</span><p className="font-medium text-foreground">{selectedInvestor.nationality || "—"}</p></div>
+                  <div><span className="text-muted-foreground">Email</span><p className="font-medium text-foreground">{selectedInvestor.email || "—"}</p></div>
+                  <div><span className="text-muted-foreground">Phone</span><p className="font-medium text-foreground">{selectedInvestor.phone || "—"}</p></div>
+                  <div><span className="text-muted-foreground">Company ID</span><p className="font-medium text-foreground">{selectedInvestor.company_id ?? "—"}</p></div>
                 </div>
+                {selectedInvestor.expertise?.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs text-muted-foreground mb-2">Expertise</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedInvestor.expertise.map((item: any) => (
+                        <span key={item.expertise_id} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                          {item.domain}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </div>
           )}
