@@ -96,17 +96,21 @@ const FounderDashboard = () => {
           getProductCategories(),
         ]);
 
-        const firstStartup = (sRes.data || [])[0];
-        setStartup(firstStartup);
-        setStatusDraft(firstStartup?.status || "Active");
+        const startups = sRes.data || [];
+        const savedStartupId = Number(localStorage.getItem("vaultbridge_founder_startup_id"));
+        const selectedStartup =
+          startups.find((item: any) => item.startup_id === savedStartupId) ||
+          startups[0];
+        setStartup(selectedStartup);
+        setStatusDraft(selectedStartup?.status || "Active");
         setLookupCounts({
           industries: (iRes.data || []).length,
           locations: (lRes.data || []).length,
           categories: (cRes.data || []).length,
         });
 
-        if (!firstStartup) return;
-        const sid = firstStartup.startup_id;
+        if (!selectedStartup) return;
+        const sid = selectedStartup.startup_id;
         setFounders((fRes.data || []).filter((x: any) => x.startup_id === sid));
         setProducts((pRes.data || []).filter((x: any) => x.startup_id === sid));
         setDeals((dRes.data || []).filter((x: any) => x.startup_id === sid));
