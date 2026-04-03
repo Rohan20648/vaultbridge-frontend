@@ -48,25 +48,155 @@ const fmtMoney = (v?: string | number | null) => (v == null || v === "" ? "N/A" 
 const fmtDate = (v?: string | null) => v?.slice(0, 10) || "N/A";
 const yesNo = (v?: number | boolean | null) => (v ? "Yes" : "No");
 
+type StartupRecord = {
+  startup_id: number;
+  startup_name?: string;
+  tagline?: string;
+  industry_id?: number;
+  industry_name?: string;
+  location_id?: number;
+  location_display?: string;
+  website?: string;
+  founded_year?: number;
+  registration_number?: string;
+  annual_revenue_usd?: number;
+  profit_loss_usd?: number;
+  num_employees?: number;
+  total_funding_usd?: number;
+  status?: string;
+};
+
+type FounderRecord = {
+  founder_id: number;
+  startup_id?: number;
+  first_name?: string;
+  last_name?: string;
+  role?: string;
+  equity_percentage?: number;
+  email?: string;
+  phone?: string;
+  nationality?: string;
+};
+
+type ProductRecord = {
+  product_id: number;
+  startup_id?: number;
+};
+
+type DealRecord = {
+  deal_id: number;
+  startup_id?: number;
+  startup_name?: string;
+  sharks?: string;
+  deal_amount_usd?: number;
+  deal_equity_percent?: number;
+  deal_type?: string;
+  royalty_per_unit?: number;
+  loan_interest_rate?: number;
+  handshake_date?: string;
+  closed_date?: string;
+  deal_status?: string;
+  deal_notes?: string;
+};
+
+type MilestoneRecord = {
+  milestone_id: number;
+  startup_id?: number;
+};
+
+type DueDiligenceRecord = {
+  dd_id: number;
+  startup_id?: number;
+  conducted_by?: string;
+  dd_status?: string;
+  financial_verified?: number | boolean;
+  legal_cleared?: number | boolean;
+  ip_verified?: number | boolean;
+};
+
+type EquityRoundRecord = {
+  round_id: number;
+  startup_id?: number;
+  round_type?: string;
+  amount_raised_usd?: number;
+};
+
+type MetricRecord = {
+  metric_id: number;
+  startup_id?: number;
+  snapshot_date?: string;
+  monthly_revenue_usd?: number;
+  monthly_burn_usd?: number;
+};
+
+type TeamHistoryRecord = {
+  team_id: number;
+  startup_id?: number;
+  record_date?: string;
+  total_headcount?: number;
+};
+
+type HealthScoreRecord = {
+  score_id: number;
+  startup_id?: number;
+  score_date?: string;
+  financial_score?: number;
+  team_score?: number;
+  product_score?: number;
+  market_score?: number;
+  overall_score?: number;
+};
+
+type ValuationRecord = {
+  valuation_id: number;
+  startup_id?: number;
+  valuation_date?: string;
+  valuation_usd?: number;
+};
+
+type StatusHistoryRecord = {
+  status_history_id: number;
+  changed_date?: string;
+  previous_status?: string;
+  new_status?: string;
+  changed_by?: string;
+  reason?: string;
+};
+
+type CursorSummary = {
+  snapshots_processed?: number;
+  average_runway_months?: number;
+  total_revenue_usd?: number;
+  total_burn_usd?: number;
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const FounderDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [savingStatus, setSavingStatus] = useState(false);
-  const [startup, setStartup] = useState<any>(null);
+  const [startup, setStartup] = useState<StartupRecord | null>(null);
   const [statusDraft, setStatusDraft] = useState("Active");
-  const [founders, setFounders] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [deals, setDeals] = useState<any[]>([]);
-  const [milestones, setMilestones] = useState<any[]>([]);
-  const [dueDiligence, setDueDiligence] = useState<any[]>([]);
-  const [equityRounds, setEquityRounds] = useState<any[]>([]);
-  const [metrics, setMetrics] = useState<any[]>([]);
-  const [teamHistory, setTeamHistory] = useState<any[]>([]);
-  const [healthScores, setHealthScores] = useState<any[]>([]);
-  const [valuations, setValuations] = useState<any[]>([]);
-  const [statusHistory, setStatusHistory] = useState<any[]>([]);
-  const [cursorSummary, setCursorSummary] = useState<any>(null);
+  const [founders, setFounders] = useState<FounderRecord[]>([]);
+  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [deals, setDeals] = useState<DealRecord[]>([]);
+  const [milestones, setMilestones] = useState<MilestoneRecord[]>([]);
+  const [dueDiligence, setDueDiligence] = useState<DueDiligenceRecord[]>([]);
+  const [equityRounds, setEquityRounds] = useState<EquityRoundRecord[]>([]);
+  const [metrics, setMetrics] = useState<MetricRecord[]>([]);
+  const [teamHistory, setTeamHistory] = useState<TeamHistoryRecord[]>([]);
+  const [healthScores, setHealthScores] = useState<HealthScoreRecord[]>([]);
+  const [valuations, setValuations] = useState<ValuationRecord[]>([]);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryRecord[]>([]);
+  const [cursorSummary, setCursorSummary] = useState<CursorSummary | null>(null);
   const [dbMessage, setDbMessage] = useState("");
   const [lookupCounts, setLookupCounts] = useState({ industries: 0, locations: 0, categories: 0 });
   const [editorOpen, setEditorOpen] = useState(false);
@@ -74,7 +204,7 @@ const FounderDashboard = () => {
   const [editorDescription, setEditorDescription] = useState("");
   const [editorValue, setEditorValue] = useState("");
   const [editorSubmitLabel, setEditorSubmitLabel] = useState("Save");
-  const [editorAction, setEditorAction] = useState<null | { type: "startup" } | { type: "founder"; item: any } | { type: "deal"; item: any }>(null);
+  const [editorAction, setEditorAction] = useState<null | { type: "startup" } | { type: "founder"; item: FounderRecord } | { type: "deal"; item: DealRecord }>(null);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -110,10 +240,10 @@ const FounderDashboard = () => {
         getProductCategories(),
       ]);
 
-      const startups = sRes.data || [];
+      const startups: StartupRecord[] = sRes.data || [];
       const savedStartupId = Number(localStorage.getItem("vaultbridge_founder_startup_id"));
       const selectedStartup =
-        startups.find((item: any) => item.startup_id === savedStartupId) ||
+        startups.find((item) => item.startup_id === savedStartupId) ||
         startups[0];
       setStartup(selectedStartup);
       setStatusDraft(selectedStartup?.status || "Active");
@@ -125,24 +255,24 @@ const FounderDashboard = () => {
 
       if (!selectedStartup) return;
       const sid = selectedStartup.startup_id;
-      setFounders((fRes.data || []).filter((x: any) => x.startup_id === sid));
-      setProducts((pRes.data || []).filter((x: any) => x.startup_id === sid));
-      setDeals((dRes.data || []).filter((x: any) => x.startup_id === sid));
-      setMilestones((mRes.data || []).filter((x: any) => x.startup_id === sid));
-      setDueDiligence((ddRes.data || []).filter((x: any) => x.startup_id === sid));
-      setEquityRounds((erRes.data || []).filter((x: any) => x.startup_id === sid));
-      setMetrics((meRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
-      setTeamHistory((tRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
-      setHealthScores((hRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => b.score_date.localeCompare(a.score_date)));
-      setValuations((vRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
+      setFounders((fRes.data || []).filter((x: FounderRecord) => x.startup_id === sid));
+      setProducts((pRes.data || []).filter((x: ProductRecord) => x.startup_id === sid));
+      setDeals((dRes.data || []).filter((x: DealRecord) => x.startup_id === sid));
+      setMilestones((mRes.data || []).filter((x: MilestoneRecord) => x.startup_id === sid));
+      setDueDiligence((ddRes.data || []).filter((x: DueDiligenceRecord) => x.startup_id === sid));
+      setEquityRounds((erRes.data || []).filter((x: EquityRoundRecord) => x.startup_id === sid));
+      setMetrics((meRes.data || []).filter((x: MetricRecord) => x.startup_id === sid).sort((a, b) => (a.snapshot_date || "").localeCompare(b.snapshot_date || "")));
+      setTeamHistory((tRes.data || []).filter((x: TeamHistoryRecord) => x.startup_id === sid).sort((a, b) => (a.record_date || "").localeCompare(b.record_date || "")));
+      setHealthScores((hRes.data || []).filter((x: HealthScoreRecord) => x.startup_id === sid).sort((a, b) => (b.score_date || "").localeCompare(a.score_date || "")));
+      setValuations((vRes.data || []).filter((x: ValuationRecord) => x.startup_id === sid).sort((a, b) => (a.valuation_date || "").localeCompare(b.valuation_date || "")));
 
       try {
         const [setupRes] = await Promise.all([setupStartupDbLab(), refreshDbData(sid)]);
         setDbMessage(setupRes.message || "Trigger and cursor are ready.");
-      } catch (dbError: any) {
-        setDbMessage(dbError?.response?.data?.message || "Database lab setup is unavailable.");
+      } catch (dbError: unknown) {
+        setDbMessage(getErrorMessage(dbError, "Database lab setup is unavailable."));
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
       toast({ title: "Loading failed", description: "Could not load founder dashboard data.", variant: "destructive" });
     } finally {
@@ -156,10 +286,10 @@ const FounderDashboard = () => {
 
   const latestMetric = metrics[metrics.length - 1];
   const latestHealth = healthScores[0];
-  const revenueData = metrics.map((x: any) => ({ month: x.snapshot_date?.slice(0, 7), revenue: Number(x.monthly_revenue_usd || 0), burn: Number(x.monthly_burn_usd || 0) }));
-  const valuationData = valuations.map((x: any) => ({ date: x.valuation_date?.slice(0, 10), value: Number(x.valuation_usd || 0) / 1e6 }));
-  const teamData = teamHistory.map((x: any) => ({ month: x.record_date?.slice(0, 7), count: Number(x.total_headcount || 0) }));
-  const roundData = equityRounds.map((x: any) => ({ round: x.round_type, amount: Number(x.amount_raised_usd || 0) / 1e6 }));
+  const revenueData = metrics.map((x) => ({ month: x.snapshot_date?.slice(0, 7), revenue: Number(x.monthly_revenue_usd || 0), burn: Number(x.monthly_burn_usd || 0) }));
+  const valuationData = valuations.map((x) => ({ date: x.valuation_date?.slice(0, 10), value: Number(x.valuation_usd || 0) / 1e6 }));
+  const teamData = teamHistory.map((x) => ({ month: x.record_date?.slice(0, 7), count: Number(x.total_headcount || 0) }));
+  const roundData = equityRounds.map((x) => ({ round: x.round_type, amount: Number(x.amount_raised_usd || 0) / 1e6 }));
   const radarData = latestHealth ? [
     { subject: "Financial", score: latestHealth.financial_score || 0 },
     { subject: "Team", score: latestHealth.team_score || 0 },
@@ -189,14 +319,14 @@ const FounderDashboard = () => {
       });
       await refreshDbData(startup.startup_id);
       setDbMessage("Status updated. The trigger inserted a new history row automatically.");
-    } catch (error: any) {
-      setDbMessage(error?.response?.data?.message || "Status update failed.");
+    } catch (error: unknown) {
+      setDbMessage(getErrorMessage(error, "Status update failed."));
     } finally {
       setSavingStatus(false);
     }
   };
 
-  const openEditor = (title: string, description: string, value: any, action: null | { type: "startup" } | { type: "founder"; item: any } | { type: "deal"; item: any }, submitLabel = "Save Changes") => {
+  const openEditor = (title: string, description: string, value: unknown, action: null | { type: "startup" } | { type: "founder"; item: FounderRecord } | { type: "deal"; item: DealRecord }, submitLabel = "Save Changes") => {
     setEditorTitle(title);
     setEditorDescription(description);
     setEditorValue(JSON.stringify(value, null, 2));
@@ -223,11 +353,11 @@ const FounderDashboard = () => {
     }, { type: "startup" }, "Update Startup");
   };
 
-  const handleFounderEdit = (founder: any) => {
+  const handleFounderEdit = (founder: FounderRecord) => {
     openEditor("Edit Founder", "Update founder details below. Extra fields are ignored by the backend.", founder, { type: "founder", item: founder }, "Update Founder");
   };
 
-  const handleDealEdit = (deal: any) => {
+  const handleDealEdit = (deal: DealRecord) => {
     openEditor("Edit Deal", "Update deal details below and save them through the existing backend API.", {
       startup_id: deal.startup_id,
       deal_amount_usd: deal.deal_amount_usd,
@@ -265,8 +395,8 @@ const FounderDashboard = () => {
 
       setEditorOpen(false);
       await loadDashboard();
-    } catch (error: any) {
-      toast({ title: "Update failed", description: error?.response?.data?.message || "Could not save changes.", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Update failed", description: getErrorMessage(error, "Could not save changes."), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -279,30 +409,30 @@ const FounderDashboard = () => {
       toast({ title: "Startup deleted", description: `${startup.startup_name} was deleted.` });
       localStorage.removeItem("vaultbridge_founder_startup_id");
       window.location.reload();
-    } catch (error: any) {
-      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete startup.", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Delete failed", description: getErrorMessage(error, "Could not delete startup."), variant: "destructive" });
     }
   };
 
-  const handleFounderDelete = async (founder: any) => {
+  const handleFounderDelete = async (founder: FounderRecord) => {
     if (!window.confirm(`Delete founder ${founder.first_name} ${founder.last_name}?`)) return;
     try {
       await deleteFounder(founder.founder_id);
       toast({ title: "Founder deleted", description: `${founder.first_name} ${founder.last_name} was deleted.` });
       await loadDashboard();
-    } catch (error: any) {
-      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete founder.", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Delete failed", description: getErrorMessage(error, "Could not delete founder."), variant: "destructive" });
     }
   };
 
-  const handleDealDelete = async (deal: any) => {
+  const handleDealDelete = async (deal: DealRecord) => {
     if (!window.confirm(`Delete deal ${deal.deal_id} for ${deal.startup_name}?`)) return;
     try {
       await deleteDeal(deal.deal_id);
       toast({ title: "Deal deleted", description: `Deal ${deal.deal_id} was deleted.` });
       await loadDashboard();
-    } catch (error: any) {
-      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete deal.", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Delete failed", description: getErrorMessage(error, "Could not delete deal."), variant: "destructive" });
     }
   };
 
@@ -404,7 +534,7 @@ const FounderDashboard = () => {
                 {activeTab === "founders" && (
                   founders.length === 0 ? <p className="text-muted-foreground">No founders linked to this startup.</p> : (
                     <div className="grid gap-5 lg:grid-cols-2">
-                      {founders.map((founder: any) => (
+                      {founders.map((founder) => (
                         <div key={`${founder.founder_id}-${founder.startup_id}`} className="glass-card rounded-xl p-5">
                           <div className="flex items-start justify-between gap-4">
                             <div>
@@ -435,7 +565,7 @@ const FounderDashboard = () => {
                 {activeTab === "deals" && (
                   <div className="grid gap-5 xl:grid-cols-2">
                     <div className="space-y-4">
-                      {deals.length === 0 ? <p className="text-muted-foreground">No deals found.</p> : deals.map((deal: any) => (
+                      {deals.length === 0 ? <p className="text-muted-foreground">No deals found.</p> : deals.map((deal) => (
                         <div key={deal.deal_id} className="glass-card rounded-xl p-5">
                           <div className="flex items-start justify-between gap-4">
                             <div>
@@ -556,7 +686,7 @@ const FounderDashboard = () => {
                     </div>
                     <Table
                       headers={["Date", "Previous", "New", "Changed By", "Reason"]}
-                      rows={statusHistory.length === 0 ? [["No trigger rows yet", "-", "-", "-", "-"]] : statusHistory.map((x) => [fmtDate(x.changed_date), x.previous_status || "N/A", x.new_status, x.changed_by || "N/A", x.reason || "N/A"])}
+                      rows={statusHistory.length === 0 ? [["No trigger rows yet", "-", "-", "-", "-"]] : statusHistory.map((x) => [fmtDate(x.changed_date), x.previous_status || "N/A", x.new_status || "N/A", x.changed_by || "N/A", x.reason || "N/A"])}
                     />
                   </>
                 )}
