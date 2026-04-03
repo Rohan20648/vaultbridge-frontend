@@ -1,56 +1,41 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, Handshake, GraduationCap, Building2, Menu, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import StatusBadge from "@/components/StatusBadge";
+import { Briefcase, Building2, Handshake, Loader2, Menu } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
-import { getSharks, getPortfolio, getDeals } from "@/lib/api";
+import StatusBadge from "@/components/StatusBadge";
+import { getDeals, getPortfolio, getShark, getSharks } from "@/lib/api";
 
 const tabs = [
   { key: "portfolio", label: "Portfolio", icon: Briefcase },
   { key: "deals", label: "Deals", icon: Handshake },
   { key: "company", label: "Company", icon: Building2 },
-];
-
-const chartColors = { primary: "hsl(217, 91%, 60%)", secondary: "hsl(160, 84%, 39%)" };
-
-const Spinner = () => (
-  <div className="flex justify-center items-center py-20">
-    <Loader2 size={28} className="animate-spin text-primary" />
-  </div>
-);
+] as const;
 
 const InvestorDashboard = () => {
   const [activeTab, setActiveTab] = useState("portfolio");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [shark, setShark] = useState<any>(null);
   const [portfolio, setPortfolio] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [expertise, setExpertise] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const [sRes, pRes, dRes] = await Promise.all([
-          getSharks(),
-          getPortfolio(),
-          getDeals(),
-        ]);
-        const firstShark = (sRes.data || [])[0];
-        setShark(firstShark);
+        const [sharksRes, portfolioRes, dealsRes] = await Promise.all([getSharks(), getPortfolio(), getDeals()]);
+        const firstShark = (sharksRes.data || [])[0];
+        if (!firstShark) return;
 
-        if (firstShark) {
-          const sid = firstShark.shark_id;
-          setPortfolio((pRes.data || []).filter((p: any) => p.shark_id === sid));
-          // Deals that involve this shark (via deal_shark join — sharks field contains name)
-          const sharkName = `${firstShark.first_name} ${firstShark.last_name}`;
-          setDeals((dRes.data || []).filter((d: any) =>
-            d.sharks && d.sharks.includes(firstShark.first_name)
-          ));
-        }
-      } catch (e) {
-        console.error(e);
+        const sharkDetails = await getShark(firstShark.shark_id);
+        setShark({ ...firstShark, ...(sharkDetails.data || {}) });
+        setExpertise(sharkDetails.data?.expertise || []);
+        setPortfolio((portfolioRes.data || []).filter((item: any) => item.shark_id === firstShark.shark_id));
+        setDeals((dealsRes.data || []).filter((item: any) => item.sharks && item.sharks.includes(firstShark.first_name)));
+      } catch (error) {
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -58,9 +43,9 @@ const InvestorDashboard = () => {
     load();
   }, []);
 
-  const portfolioChartData = portfolio.map((p: any) => ({
-    name: p.startup_name,
-    invested: p.total_invested_usd ? Number(p.total_invested_usd) / 1000 : 0, // in K
+  const portfolioChartData = portfolio.map((item: any) => ({
+    name: item.startup_name,
+    invested: item.total_invested_usd ? Number(item.total_invested_usd) / 1000 : 0,
   }));
 
   return (
@@ -72,10 +57,9 @@ const InvestorDashboard = () => {
             <p className="text-xs text-muted-foreground mt-1">Investor Dashboard</p>
           </div>
           <nav className="p-3 space-y-1">
-            {tabs.map(t => (
-              <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${activeTab === t.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"}`}>
-                <t.icon size={16} /> {t.label}
+            {tabs.map((tab) => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${activeTab === tab.key ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent/50"}`}>
+                <tab.icon size={16} /> {tab.label}
               </button>
             ))}
           </nav>
@@ -84,52 +68,50 @@ const InvestorDashboard = () => {
         <main className="flex-1 min-w-0">
           <header className="h-14 border-b border-border/50 flex items-center px-5 gap-4">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground hover:text-foreground"><Menu size={20} /></button>
-            <h1 className="text-lg font-semibold">{shark ? `${shark.first_name} ${shark.last_name}` : "Loading..."}</h1>
+            <h1 className="text-lg font-semibold">{shark ? `${shark.first_name} ${shark.last_name}` : "Investor Dashboard"}</h1>
             {shark?.company_name && <span className="text-sm text-muted-foreground">{shark.company_name}</span>}
           </header>
 
           <div className="p-6">
-            {loading ? <Spinner /> : (
-              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+            {loading ? (
+              <div className="flex justify-center items-center py-20"><Loader2 size={28} className="animate-spin text-primary" /></div>
+            ) : (
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
                 {activeTab === "portfolio" && (
                   <div className="space-y-6">
                     <h2 className="text-xl font-bold">Portfolio</h2>
                     {portfolio.length === 0 ? <p className="text-muted-foreground">No portfolio entries found.</p> : (
                       <>
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                          {portfolio.map((p: any) => (
-                            <div key={p.portfolio_id} className="glass-card glass-card-hover rounded-xl p-5">
+                          {portfolio.map((item: any) => (
+                            <div key={item.portfolio_id} className="glass-card rounded-xl p-5">
                               <div className="flex justify-between items-start mb-3">
-                                <h3 className="font-semibold text-foreground text-sm">{p.startup_name}</h3>
-                                <StatusBadge status={p.portfolio_status} />
+                                <h3 className="font-semibold text-foreground text-sm">{item.startup_name}</h3>
+                                <StatusBadge status={item.portfolio_status} />
                               </div>
                               <p className="text-2xl font-bold text-foreground mb-1">
-                                {p.current_valuation_usd ? `$${(Number(p.current_valuation_usd) / 1e6).toFixed(1)}M` : "N/A"}
+                                {item.current_valuation_usd ? `$${(Number(item.current_valuation_usd) / 1e6).toFixed(1)}M` : "N/A"}
                               </p>
                               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-3">
-                                <span>Equity: {p.current_equity_percent ? `${p.current_equity_percent}%` : "—"}</span>
-                                <span>Invested: {p.total_invested_usd ? `$${Number(p.total_invested_usd).toLocaleString()}` : "—"}</span>
-                                <span className={p.roi_percent < 0 ? "text-destructive" : "text-success"}>
-                                  ROI: {p.roi_percent != null ? `${p.roi_percent}%` : "—"}
-                                </span>
+                                <span>Equity: {item.current_equity_percent ? `${item.current_equity_percent}%` : "N/A"}</span>
+                                <span>Invested: {item.total_invested_usd ? `$${Number(item.total_invested_usd).toLocaleString()}` : "N/A"}</span>
+                                <span className={item.roi_percent < 0 ? "text-destructive" : "text-success"}>ROI: {item.roi_percent != null ? `${item.roi_percent}%` : "N/A"}</span>
                               </div>
                             </div>
                           ))}
                         </div>
-                        {portfolioChartData.length > 0 && (
-                          <div className="glass-card rounded-xl p-5">
-                            <h3 className="font-semibold mb-4">Portfolio Distribution (K USD)</h3>
-                            <ResponsiveContainer width="100%" height={250}>
-                              <BarChart data={portfolioChartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
-                                <XAxis dataKey="name" stroke="hsl(215,20%,55%)" fontSize={11} />
-                                <YAxis stroke="hsl(215,20%,55%)" fontSize={12} />
-                                <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
-                                <Bar dataKey="invested" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
+                        <div className="glass-card rounded-xl p-5">
+                          <h3 className="font-semibold mb-4">Portfolio Distribution (K USD)</h3>
+                          <ResponsiveContainer width="100%" height={250}>
+                            <BarChart data={portfolioChartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,18%)" />
+                              <XAxis dataKey="name" stroke="hsl(215,20%,55%)" fontSize={11} />
+                              <YAxis stroke="hsl(215,20%,55%)" fontSize={12} />
+                              <Tooltip contentStyle={{ background: "hsl(217,33%,10%)", border: "1px solid hsl(217,33%,18%)", borderRadius: 8 }} />
+                              <Bar dataKey="invested" fill="hsl(217, 91%, 60%)" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
                       </>
                     )}
                   </div>
@@ -150,14 +132,14 @@ const InvestorDashboard = () => {
                             <th className="p-4 font-medium">Status</th>
                           </tr></thead>
                           <tbody>
-                            {deals.map((d: any) => (
-                              <tr key={d.deal_id} className="border-b border-border/30 hover:bg-accent/30 transition-colors">
-                                <td className="p-4 font-medium text-foreground">{d.startup_name}</td>
-                                <td className="p-4 text-muted-foreground">{d.deal_amount_usd ? `$${Number(d.deal_amount_usd).toLocaleString()}` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{d.deal_equity_percent ? `${d.deal_equity_percent}%` : "—"}</td>
-                                <td className="p-4 text-muted-foreground">{d.deal_type}</td>
-                                <td className="p-4 text-muted-foreground">{d.handshake_date?.slice(0, 10) || "—"}</td>
-                                <td className="p-4"><StatusBadge status={d.deal_status} /></td>
+                            {deals.map((deal: any) => (
+                              <tr key={deal.deal_id} className="border-b border-border/30">
+                                <td className="p-4 font-medium text-foreground">{deal.startup_name}</td>
+                                <td className="p-4 text-muted-foreground">{deal.deal_amount_usd ? `$${Number(deal.deal_amount_usd).toLocaleString()}` : "N/A"}</td>
+                                <td className="p-4 text-muted-foreground">{deal.deal_equity_percent ? `${deal.deal_equity_percent}%` : "N/A"}</td>
+                                <td className="p-4 text-muted-foreground">{deal.deal_type}</td>
+                                <td className="p-4 text-muted-foreground">{deal.handshake_date?.slice(0, 10) || "N/A"}</td>
+                                <td className="p-4"><StatusBadge status={deal.deal_status} /></td>
                               </tr>
                             ))}
                           </tbody>
@@ -175,21 +157,34 @@ const InvestorDashboard = () => {
                         <div className="space-y-4 text-sm">
                           {[
                             ["Name", `${shark.first_name} ${shark.last_name}`],
-                            ["Company", shark.company_name || "—"],
-                            ["Company Type", shark.company_type || "—"],
-                            ["Net Worth", shark.net_worth_usd_millions ? `$${shark.net_worth_usd_millions}M` : "—"],
-                            ["Nationality", shark.nationality || "—"],
-                            ["Email", shark.email || "—"],
-                          ].map(([k, v]) => (
-                            <div key={k} className="flex justify-between py-2 border-b border-border/30">
-                              <span className="text-muted-foreground">{k}</span>
-                              <span className="font-medium text-foreground">{v}</span>
+                            ["Company", shark.company_name || "N/A"],
+                            ["Company Type", shark.company_type || "N/A"],
+                            ["Net Worth", shark.net_worth_usd_millions ? `$${shark.net_worth_usd_millions}M` : "N/A"],
+                            ["Nationality", shark.nationality || "N/A"],
+                            ["Email", shark.email || "N/A"],
+                          ].map(([label, value]: [string, string]) => (
+                            <div key={label} className="flex justify-between py-2 border-b border-border/30">
+                              <span className="text-muted-foreground">{label}</span>
+                              <span className="font-medium text-foreground">{value}</span>
                             </div>
                           ))}
                           {shark.bio && (
                             <div className="pt-2">
                               <p className="text-muted-foreground text-xs mb-1">Bio</p>
                               <p className="text-foreground text-sm">{shark.bio}</p>
+                            </div>
+                          )}
+                          {expertise.length > 0 && (
+                            <div className="pt-2">
+                              <p className="text-muted-foreground text-xs mb-2">Expertise</p>
+                              <div className="flex flex-wrap gap-2">
+                                {expertise.map((item: any) => (
+                                  <span key={item.expertise_id} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                                    {item.domain}
+                                    {item.years_experience ? ` • ${item.years_experience}y` : ""}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
