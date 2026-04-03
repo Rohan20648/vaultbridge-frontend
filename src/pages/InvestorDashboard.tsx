@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Briefcase, Building2, Handshake, Loader2, Menu } from "lucide-react";
 import PageTransition from "@/components/PageTransition";
+import RecordEditorDialog from "@/components/RecordEditorDialog";
 import StatusBadge from "@/components/StatusBadge";
-import { getDeals, getPortfolio, getShark, getSharks } from "@/lib/api";
+import { deletePortfolio, deleteShark, getDeals, getPortfolio, getShark, getSharks, updatePortfolio, updateShark } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const tabs = [
   { key: "portfolio", label: "Portfolio", icon: Briefcase },
@@ -12,42 +14,197 @@ const tabs = [
   { key: "company", label: "Company", icon: Building2 },
 ] as const;
 
+type ExpertiseRecord = {
+  expertise_id: number;
+  domain: string;
+  years_experience?: number;
+};
+
+type SharkRecord = {
+  shark_id: number;
+  first_name?: string;
+  last_name?: string;
+  company_name?: string;
+  company_type?: string;
+  company_id?: number;
+  nationality?: string;
+  email?: string;
+  phone?: string;
+  net_worth_usd_millions?: number;
+  bio?: string;
+  expertise?: ExpertiseRecord[];
+};
+
+type PortfolioRecord = {
+  portfolio_id: number;
+  shark_id: number;
+  startup_name?: string;
+  portfolio_status?: string;
+  current_valuation_usd?: number;
+  current_equity_percent?: number;
+  total_invested_usd?: number;
+  roi_percent?: number;
+};
+
+type DealRecord = {
+  deal_id: number;
+  startup_name?: string;
+  deal_amount_usd?: number;
+  deal_equity_percent?: number;
+  deal_type?: string;
+  handshake_date?: string;
+  deal_status?: string;
+  sharks?: string;
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const InvestorDashboard = () => {
   const [activeTab, setActiveTab] = useState("portfolio");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [shark, setShark] = useState<any>(null);
-  const [portfolio, setPortfolio] = useState<any[]>([]);
-  const [deals, setDeals] = useState<any[]>([]);
-  const [expertise, setExpertise] = useState<any[]>([]);
+  const [shark, setShark] = useState<SharkRecord | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioRecord[]>([]);
+  const [deals, setDeals] = useState<DealRecord[]>([]);
+  const [expertise, setExpertise] = useState<ExpertiseRecord[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorTitle, setEditorTitle] = useState("");
+  const [editorDescription, setEditorDescription] = useState("");
+  const [editorValue, setEditorValue] = useState("");
+  const [editorSubmitLabel, setEditorSubmitLabel] = useState("Save");
+  const [editorAction, setEditorAction] = useState<null | { type: "investor" } | { type: "portfolio"; item: PortfolioRecord }>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const [sharksRes, portfolioRes, dealsRes] = await Promise.all([getSharks(), getPortfolio(), getDeals()]);
+      const sharks: SharkRecord[] = sharksRes.data || [];
+      const savedSharkId = Number(localStorage.getItem("vaultbridge_investor_shark_id"));
+      const selectedShark =
+        sharks.find((item) => item.shark_id === savedSharkId) ||
+        sharks[0];
+      if (!selectedShark) return;
+
+      const sharkDetails = await getShark(selectedShark.shark_id);
+      setShark({ ...selectedShark, ...(sharkDetails.data || {}) });
+      setExpertise(sharkDetails.data?.expertise || []);
+      setPortfolio((portfolioRes.data || []).filter((item: PortfolioRecord) => item.shark_id === selectedShark.shark_id));
+      setDeals((dealsRes.data || []).filter((item: DealRecord) => item.sharks && item.sharks.includes(selectedShark.first_name || "")));
+    } catch (error: unknown) {
+      console.error(error);
+      toast({ title: "Loading failed", description: "Could not load investor dashboard data.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const [sharksRes, portfolioRes, dealsRes] = await Promise.all([getSharks(), getPortfolio(), getDeals()]);
-        const sharks = sharksRes.data || [];
-        const savedSharkId = Number(localStorage.getItem("vaultbridge_investor_shark_id"));
-        const selectedShark =
-          sharks.find((item: any) => item.shark_id === savedSharkId) ||
-          sharks[0];
-        if (!selectedShark) return;
-
-        const sharkDetails = await getShark(selectedShark.shark_id);
-        setShark({ ...selectedShark, ...(sharkDetails.data || {}) });
-        setExpertise(sharkDetails.data?.expertise || []);
-        setPortfolio((portfolioRes.data || []).filter((item: any) => item.shark_id === selectedShark.shark_id));
-        setDeals((dealsRes.data || []).filter((item: any) => item.sharks && item.sharks.includes(selectedShark.first_name)));
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadDashboard();
   }, []);
 
-  const portfolioChartData = portfolio.map((item: any) => ({
+  const openEditor = (title: string, description: string, value: unknown, action: null | { type: "investor" } | { type: "portfolio"; item: PortfolioRecord }, submitLabel = "Save Changes") => {
+    setEditorTitle(title);
+    setEditorDescription(description);
+    setEditorValue(JSON.stringify(value, null, 2));
+    setEditorSubmitLabel(submitLabel);
+    setEditorAction(action);
+    setEditorOpen(true);
+  };
+
+  const handlePortfolioEdit = (item: PortfolioRecord) => {
+    openEditor("Edit Portfolio Entry", "Update the portfolio record JSON and save it.", {
+      total_invested_usd: item.total_invested_usd,
+      current_equity_percent: item.current_equity_percent,
+      portfolio_status: item.portfolio_status,
+      current_valuation_usd: item.current_valuation_usd,
+      roi_percent: item.roi_percent,
+    }, { type: "portfolio", item }, "Update Portfolio");
+  };
+
+  const handleInvestorEdit = () => {
+    if (!shark) return;
+    openEditor("Edit Investor", "Update the investor fields below. Company information is read-only because the backend update endpoint edits the shark record only.", {
+      first_name: shark.first_name,
+      last_name: shark.last_name,
+      email: shark.email,
+      phone: shark.phone,
+      nationality: shark.nationality,
+      net_worth_usd_millions: shark.net_worth_usd_millions,
+      company_id: shark.company_id,
+      bio: shark.bio,
+    }, { type: "investor" }, "Update Investor");
+  };
+
+  const submitInvestorEdit = async () => {
+    if (!shark) return;
+    try {
+      setSubmitting(true);
+      await updateShark(shark.shark_id, JSON.parse(editorValue));
+      setEditorOpen(false);
+      toast({ title: "Investor updated", description: "The investor record was updated successfully." });
+      await loadDashboard();
+    } catch (error: unknown) {
+      toast({ title: "Update failed", description: getErrorMessage(error, "Could not update investor."), variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitPortfolioEdit = async (item: PortfolioRecord) => {
+    try {
+      setSubmitting(true);
+      await updatePortfolio(item.portfolio_id, JSON.parse(editorValue));
+      setEditorOpen(false);
+      toast({ title: "Portfolio updated", description: "The portfolio entry was updated successfully." });
+      await loadDashboard();
+    } catch (error: unknown) {
+      toast({ title: "Update failed", description: getErrorMessage(error, "Could not update portfolio entry."), variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePortfolioDelete = async (item: PortfolioRecord) => {
+    if (!window.confirm(`Delete portfolio entry ${item.portfolio_id} for ${item.startup_name}?`)) return;
+    try {
+      await deletePortfolio(item.portfolio_id);
+      toast({ title: "Portfolio entry deleted", description: `${item.startup_name} was removed from the portfolio.` });
+      await loadDashboard();
+    } catch (error: unknown) {
+      toast({ title: "Delete failed", description: getErrorMessage(error, "Could not delete portfolio entry."), variant: "destructive" });
+    }
+  };
+
+  const handleInvestorDelete = async () => {
+    if (!shark || !window.confirm(`Delete investor ${shark.first_name} ${shark.last_name}?`)) return;
+    try {
+      await deleteShark(shark.shark_id);
+      toast({ title: "Investor deleted", description: "The investor record was deleted." });
+      localStorage.removeItem("vaultbridge_investor_shark_id");
+      window.location.reload();
+    } catch (error: unknown) {
+      toast({ title: "Delete failed", description: getErrorMessage(error, "Could not delete investor."), variant: "destructive" });
+    }
+  };
+
+  const handleEditorSubmit = async () => {
+    if (!editorAction) return;
+    if (editorAction.type === "investor") {
+      await submitInvestorEdit();
+      return;
+    }
+    await submitPortfolioEdit(editorAction.item);
+  };
+
+  const portfolioChartData = portfolio.map((item) => ({
     name: item.startup_name,
     invested: item.total_invested_usd ? Number(item.total_invested_usd) / 1000 : 0,
   }));
@@ -87,7 +244,7 @@ const InvestorDashboard = () => {
                     {portfolio.length === 0 ? <p className="text-muted-foreground">No portfolio entries found.</p> : (
                       <>
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                          {portfolio.map((item: any) => (
+                          {portfolio.map((item) => (
                             <div key={item.portfolio_id} className="glass-card rounded-xl p-5">
                               <div className="flex justify-between items-start mb-3">
                                 <h3 className="font-semibold text-foreground text-sm">{item.startup_name}</h3>
@@ -100,6 +257,14 @@ const InvestorDashboard = () => {
                                 <span>Equity: {item.current_equity_percent ? `${item.current_equity_percent}%` : "N/A"}</span>
                                 <span>Invested: {item.total_invested_usd ? `$${Number(item.total_invested_usd).toLocaleString()}` : "N/A"}</span>
                                 <span className={item.roi_percent < 0 ? "text-destructive" : "text-success"}>ROI: {item.roi_percent != null ? `${item.roi_percent}%` : "N/A"}</span>
+                              </div>
+                              <div className="mt-4 flex gap-2">
+                                <button onClick={() => handlePortfolioEdit(item)} className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/15">
+                                  Edit
+                                </button>
+                                <button onClick={() => handlePortfolioDelete(item)} className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/15">
+                                  Delete
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -136,7 +301,7 @@ const InvestorDashboard = () => {
                             <th className="p-4 font-medium">Status</th>
                           </tr></thead>
                           <tbody>
-                            {deals.map((deal: any) => (
+                            {deals.map((deal) => (
                               <tr key={deal.deal_id} className="border-b border-border/30">
                                 <td className="p-4 font-medium text-foreground">{deal.startup_name}</td>
                                 <td className="p-4 text-muted-foreground">{deal.deal_amount_usd ? `$${Number(deal.deal_amount_usd).toLocaleString()}` : "N/A"}</td>
@@ -155,7 +320,19 @@ const InvestorDashboard = () => {
 
                 {activeTab === "company" && (
                   <div>
-                    <h2 className="text-xl font-bold mb-5">Company Details</h2>
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="text-xl font-bold">Company Details</h2>
+                      {shark && (
+                        <div className="flex gap-2">
+                          <button onClick={handleInvestorEdit} className="rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/15">
+                            Edit Investor
+                          </button>
+                          <button onClick={handleInvestorDelete} className="rounded-lg bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/15">
+                            Delete Investor
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     {!shark ? <p className="text-muted-foreground">No investor data found.</p> : (
                       <div className="glass-card rounded-xl p-6 max-w-lg">
                         <div className="space-y-4 text-sm">
@@ -182,7 +359,7 @@ const InvestorDashboard = () => {
                             <div className="pt-2">
                               <p className="text-muted-foreground text-xs mb-2">Expertise</p>
                               <div className="flex flex-wrap gap-2">
-                                {expertise.map((item: any) => (
+                                {expertise.map((item) => (
                                   <span key={item.expertise_id} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
                                     {item.domain}
                                     {item.years_experience ? ` • ${item.years_experience}y` : ""}
@@ -201,6 +378,17 @@ const InvestorDashboard = () => {
           </div>
         </main>
       </div>
+      <RecordEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        title={editorTitle}
+        description={editorDescription}
+        value={editorValue}
+        onChange={setEditorValue}
+        onSubmit={handleEditorSubmit}
+        submitting={submitting}
+        submitLabel={editorSubmitLabel}
+      />
     </PageTransition>
   );
 };
