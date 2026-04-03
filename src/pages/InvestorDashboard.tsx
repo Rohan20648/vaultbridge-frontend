@@ -26,14 +26,18 @@ const InvestorDashboard = () => {
       try {
         setLoading(true);
         const [sharksRes, portfolioRes, dealsRes] = await Promise.all([getSharks(), getPortfolio(), getDeals()]);
-        const firstShark = (sharksRes.data || [])[0];
-        if (!firstShark) return;
+        const sharks = sharksRes.data || [];
+        const savedSharkId = Number(localStorage.getItem("vaultbridge_investor_shark_id"));
+        const selectedShark =
+          sharks.find((item: any) => item.shark_id === savedSharkId) ||
+          sharks[0];
+        if (!selectedShark) return;
 
-        const sharkDetails = await getShark(firstShark.shark_id);
-        setShark({ ...firstShark, ...(sharkDetails.data || {}) });
+        const sharkDetails = await getShark(selectedShark.shark_id);
+        setShark({ ...selectedShark, ...(sharkDetails.data || {}) });
         setExpertise(sharkDetails.data?.expertise || []);
-        setPortfolio((portfolioRes.data || []).filter((item: any) => item.shark_id === firstShark.shark_id));
-        setDeals((dealsRes.data || []).filter((item: any) => item.sharks && item.sharks.includes(firstShark.first_name)));
+        setPortfolio((portfolioRes.data || []).filter((item: any) => item.shark_id === selectedShark.shark_id));
+        setDeals((dealsRes.data || []).filter((item: any) => item.sharks && item.sharks.includes(selectedShark.first_name)));
       } catch (error) {
         console.error(error);
       } finally {
