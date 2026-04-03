@@ -70,6 +70,9 @@ const InvestorOnboarding = () => {
         expertise_domain: allData.expertise[0]?.domain || null,
       });
       const shark_id = sharkRes.data?.shark_id;
+      if (shark_id) {
+        localStorage.setItem("vaultbridge_investor_shark_id", String(shark_id));
+      }
 
       // 2. Create portfolio entries
       for (const p of allData.portfolio) {
