@@ -83,6 +83,9 @@ const FounderOnboarding = () => {
         status: allData.startup.status,
       });
       const startup_id = startupRes.data?.startup_id;
+      if (startup_id) {
+        localStorage.setItem("vaultbridge_founder_startup_id", String(startup_id));
+      }
 
       // 2. Create founder and link to startup
       await createFounder({
