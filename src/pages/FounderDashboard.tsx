@@ -3,8 +3,12 @@ import { motion } from "framer-motion";
 import { Database, Handshake, Home, Loader2, Menu, TrendingUp, UserRound } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PageTransition from "@/components/PageTransition";
+import RecordEditorDialog from "@/components/RecordEditorDialog";
 import StatusBadge from "@/components/StatusBadge";
 import {
+  deleteDeal,
+  deleteFounder,
+  deleteStartup,
   getDeals,
   getDueDiligence,
   getEquityRounds,
@@ -23,8 +27,11 @@ import {
   getTeamHistory,
   getValuations,
   setupStartupDbLab,
+  updateDeal,
+  updateFounder,
   updateStartup,
 } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: Home },
@@ -62,6 +69,14 @@ const FounderDashboard = () => {
   const [cursorSummary, setCursorSummary] = useState<any>(null);
   const [dbMessage, setDbMessage] = useState("");
   const [lookupCounts, setLookupCounts] = useState({ industries: 0, locations: 0, categories: 0 });
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorTitle, setEditorTitle] = useState("");
+  const [editorDescription, setEditorDescription] = useState("");
+  const [editorValue, setEditorValue] = useState("");
+  const [editorSubmitLabel, setEditorSubmitLabel] = useState("Save");
+  const [editorAction, setEditorAction] = useState<null | { type: "startup" } | { type: "founder"; item: any } | { type: "deal"; item: any }>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const refreshDbData = async (startupId: number) => {
     const [startupRes, historyRes, cursorRes] = await Promise.all([
@@ -75,66 +90,68 @@ const FounderDashboard = () => {
     setCursorSummary(cursorRes.data || null);
   };
 
-  useEffect(() => {
-    const load = async () => {
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const [sRes, fRes, pRes, dRes, mRes, ddRes, erRes, meRes, tRes, hRes, vRes, iRes, lRes, cRes] = await Promise.all([
+        getStartups(),
+        getFounders(),
+        getProducts(),
+        getDeals(),
+        getMilestones(),
+        getDueDiligence(),
+        getEquityRounds(),
+        getMetrics(),
+        getTeamHistory(),
+        getHealthScores(),
+        getValuations(),
+        getIndustries(),
+        getLocations(),
+        getProductCategories(),
+      ]);
+
+      const startups = sRes.data || [];
+      const savedStartupId = Number(localStorage.getItem("vaultbridge_founder_startup_id"));
+      const selectedStartup =
+        startups.find((item: any) => item.startup_id === savedStartupId) ||
+        startups[0];
+      setStartup(selectedStartup);
+      setStatusDraft(selectedStartup?.status || "Active");
+      setLookupCounts({
+        industries: (iRes.data || []).length,
+        locations: (lRes.data || []).length,
+        categories: (cRes.data || []).length,
+      });
+
+      if (!selectedStartup) return;
+      const sid = selectedStartup.startup_id;
+      setFounders((fRes.data || []).filter((x: any) => x.startup_id === sid));
+      setProducts((pRes.data || []).filter((x: any) => x.startup_id === sid));
+      setDeals((dRes.data || []).filter((x: any) => x.startup_id === sid));
+      setMilestones((mRes.data || []).filter((x: any) => x.startup_id === sid));
+      setDueDiligence((ddRes.data || []).filter((x: any) => x.startup_id === sid));
+      setEquityRounds((erRes.data || []).filter((x: any) => x.startup_id === sid));
+      setMetrics((meRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
+      setTeamHistory((tRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
+      setHealthScores((hRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => b.score_date.localeCompare(a.score_date)));
+      setValuations((vRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
+
       try {
-        setLoading(true);
-        const [sRes, fRes, pRes, dRes, mRes, ddRes, erRes, meRes, tRes, hRes, vRes, iRes, lRes, cRes] = await Promise.all([
-          getStartups(),
-          getFounders(),
-          getProducts(),
-          getDeals(),
-          getMilestones(),
-          getDueDiligence(),
-          getEquityRounds(),
-          getMetrics(),
-          getTeamHistory(),
-          getHealthScores(),
-          getValuations(),
-          getIndustries(),
-          getLocations(),
-          getProductCategories(),
-        ]);
-
-        const startups = sRes.data || [];
-        const savedStartupId = Number(localStorage.getItem("vaultbridge_founder_startup_id"));
-        const selectedStartup =
-          startups.find((item: any) => item.startup_id === savedStartupId) ||
-          startups[0];
-        setStartup(selectedStartup);
-        setStatusDraft(selectedStartup?.status || "Active");
-        setLookupCounts({
-          industries: (iRes.data || []).length,
-          locations: (lRes.data || []).length,
-          categories: (cRes.data || []).length,
-        });
-
-        if (!selectedStartup) return;
-        const sid = selectedStartup.startup_id;
-        setFounders((fRes.data || []).filter((x: any) => x.startup_id === sid));
-        setProducts((pRes.data || []).filter((x: any) => x.startup_id === sid));
-        setDeals((dRes.data || []).filter((x: any) => x.startup_id === sid));
-        setMilestones((mRes.data || []).filter((x: any) => x.startup_id === sid));
-        setDueDiligence((ddRes.data || []).filter((x: any) => x.startup_id === sid));
-        setEquityRounds((erRes.data || []).filter((x: any) => x.startup_id === sid));
-        setMetrics((meRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.snapshot_date.localeCompare(b.snapshot_date)));
-        setTeamHistory((tRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.record_date.localeCompare(b.record_date)));
-        setHealthScores((hRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => b.score_date.localeCompare(a.score_date)));
-        setValuations((vRes.data || []).filter((x: any) => x.startup_id === sid).sort((a: any, b: any) => a.valuation_date.localeCompare(b.valuation_date)));
-
-        try {
-          const [setupRes] = await Promise.all([setupStartupDbLab(), refreshDbData(sid)]);
-          setDbMessage(setupRes.message || "Trigger and cursor are ready.");
-        } catch (dbError: any) {
-          setDbMessage(dbError?.response?.data?.message || "Database lab setup is unavailable.");
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
+        const [setupRes] = await Promise.all([setupStartupDbLab(), refreshDbData(sid)]);
+        setDbMessage(setupRes.message || "Trigger and cursor are ready.");
+      } catch (dbError: any) {
+        setDbMessage(dbError?.response?.data?.message || "Database lab setup is unavailable.");
       }
-    };
-    load();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Loading failed", description: "Could not load founder dashboard data.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard();
   }, []);
 
   const latestMetric = metrics[metrics.length - 1];
@@ -176,6 +193,116 @@ const FounderDashboard = () => {
       setDbMessage(error?.response?.data?.message || "Status update failed.");
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  const openEditor = (title: string, description: string, value: any, action: null | { type: "startup" } | { type: "founder"; item: any } | { type: "deal"; item: any }, submitLabel = "Save Changes") => {
+    setEditorTitle(title);
+    setEditorDescription(description);
+    setEditorValue(JSON.stringify(value, null, 2));
+    setEditorSubmitLabel(submitLabel);
+    setEditorAction(action);
+    setEditorOpen(true);
+  };
+
+  const handleStartupEdit = () => {
+    if (!startup) return;
+    openEditor("Edit Startup", "Update your startup fields here and save the JSON payload.", {
+      startup_name: startup.startup_name,
+      tagline: startup.tagline,
+      industry_id: startup.industry_id,
+      location_id: startup.location_id,
+      website: startup.website,
+      founded_year: startup.founded_year,
+      registration_number: startup.registration_number,
+      annual_revenue_usd: startup.annual_revenue_usd,
+      profit_loss_usd: startup.profit_loss_usd,
+      num_employees: startup.num_employees,
+      total_funding_usd: startup.total_funding_usd,
+      status: startup.status,
+    }, { type: "startup" }, "Update Startup");
+  };
+
+  const handleFounderEdit = (founder: any) => {
+    openEditor("Edit Founder", "Update founder details below. Extra fields are ignored by the backend.", founder, { type: "founder", item: founder }, "Update Founder");
+  };
+
+  const handleDealEdit = (deal: any) => {
+    openEditor("Edit Deal", "Update deal details below and save them through the existing backend API.", {
+      startup_id: deal.startup_id,
+      deal_amount_usd: deal.deal_amount_usd,
+      deal_equity_percent: deal.deal_equity_percent,
+      deal_type: deal.deal_type,
+      royalty_per_unit: deal.royalty_per_unit,
+      loan_interest_rate: deal.loan_interest_rate,
+      handshake_date: deal.handshake_date,
+      closed_date: deal.closed_date,
+      deal_status: deal.deal_status,
+      deal_notes: deal.deal_notes,
+    }, { type: "deal", item: deal }, "Update Deal");
+  };
+
+  const submitEditor = async () => {
+    if (!editorAction) return;
+    try {
+      setSubmitting(true);
+      const payload = JSON.parse(editorValue);
+
+      if (editorAction.type === "startup" && startup) {
+        await updateStartup(startup.startup_id, payload);
+        toast({ title: "Startup updated", description: "Startup details were updated successfully." });
+      }
+
+      if (editorAction.type === "founder") {
+        await updateFounder(editorAction.item.founder_id, payload);
+        toast({ title: "Founder updated", description: "Founder details were updated successfully." });
+      }
+
+      if (editorAction.type === "deal") {
+        await updateDeal(editorAction.item.deal_id, payload);
+        toast({ title: "Deal updated", description: "Deal details were updated successfully." });
+      }
+
+      setEditorOpen(false);
+      await loadDashboard();
+    } catch (error: any) {
+      toast({ title: "Update failed", description: error?.response?.data?.message || "Could not save changes.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartupDelete = async () => {
+    if (!startup || !window.confirm(`Delete startup ${startup.startup_name}?`)) return;
+    try {
+      await deleteStartup(startup.startup_id);
+      toast({ title: "Startup deleted", description: `${startup.startup_name} was deleted.` });
+      localStorage.removeItem("vaultbridge_founder_startup_id");
+      window.location.reload();
+    } catch (error: any) {
+      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete startup.", variant: "destructive" });
+    }
+  };
+
+  const handleFounderDelete = async (founder: any) => {
+    if (!window.confirm(`Delete founder ${founder.first_name} ${founder.last_name}?`)) return;
+    try {
+      await deleteFounder(founder.founder_id);
+      toast({ title: "Founder deleted", description: `${founder.first_name} ${founder.last_name} was deleted.` });
+      await loadDashboard();
+    } catch (error: any) {
+      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete founder.", variant: "destructive" });
+    }
+  };
+
+  const handleDealDelete = async (deal: any) => {
+    if (!window.confirm(`Delete deal ${deal.deal_id} for ${deal.startup_name}?`)) return;
+    try {
+      await deleteDeal(deal.deal_id);
+      toast({ title: "Deal deleted", description: `Deal ${deal.deal_id} was deleted.` });
+      await loadDashboard();
+    } catch (error: any) {
+      toast({ title: "Delete failed", description: error?.response?.data?.message || "Could not delete deal.", variant: "destructive" });
     }
   };
 
@@ -236,6 +363,14 @@ const FounderDashboard = () => {
               <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="space-y-6">
                 {activeTab === "overview" && (
                   <>
+                    <div className="flex flex-wrap gap-3">
+                      <button onClick={handleStartupEdit} disabled={!startup} className="rounded-lg bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+                        Edit Startup
+                      </button>
+                      <button onClick={handleStartupDelete} disabled={!startup} className="rounded-lg bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/15 disabled:opacity-60">
+                        Delete Startup
+                      </button>
+                    </div>
                     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                       <StatCard label="Industry" value={startup?.industry_name || "N/A"} />
                       <StatCard label="Location" value={startup?.location_display || "N/A"} />
@@ -283,6 +418,14 @@ const FounderDashboard = () => {
                             <p>Phone: {founder.phone || "N/A"}</p>
                             <p>Nationality: {founder.nationality || "N/A"}</p>
                           </div>
+                          <div className="mt-4 flex gap-2">
+                            <button onClick={() => handleFounderEdit(founder)} className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/15">
+                              Edit
+                            </button>
+                            <button onClick={() => handleFounderDelete(founder)} className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/15">
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -306,6 +449,14 @@ const FounderDashboard = () => {
                             <p>Equity: {deal.deal_equity_percent != null ? `${deal.deal_equity_percent}%` : "N/A"}</p>
                             <p>Type: {deal.deal_type || "N/A"}</p>
                             <p>Date: {fmtDate(deal.handshake_date)}</p>
+                          </div>
+                          <div className="mt-4 flex gap-2">
+                            <button onClick={() => handleDealEdit(deal)} className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/15">
+                              Edit
+                            </button>
+                            <button onClick={() => handleDealDelete(deal)} className="rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/15">
+                              Delete
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -414,6 +565,17 @@ const FounderDashboard = () => {
           </div>
         </main>
       </div>
+      <RecordEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        title={editorTitle}
+        description={editorDescription}
+        value={editorValue}
+        onChange={setEditorValue}
+        onSubmit={submitEditor}
+        submitting={submitting}
+        submitLabel={editorSubmitLabel}
+      />
     </PageTransition>
   );
 };
