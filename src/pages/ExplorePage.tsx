@@ -9,16 +9,61 @@ import { getIndustries, getShark, getSharks, getStartup, getStartups } from "@/l
 
 const statuses = ["All", "Active", "IPO", "Acquired", "Dormant", "Shutdown", "Pivoting"];
 
+type IndustryRecord = {
+  industry_name: string;
+};
+
+type StartupRecord = {
+  startup_id: number;
+  startup_name?: string;
+  tagline?: string;
+  industry_name?: string;
+  status?: string;
+  founded_year?: number;
+  total_funding_usd?: number;
+  num_employees?: number;
+  location_display?: string;
+  website?: string;
+};
+
+type InvestorExpertise = {
+  expertise_id: number;
+  domain: string;
+};
+
+type InvestorRecord = {
+  shark_id: number;
+  first_name?: string;
+  last_name?: string;
+  company_name?: string;
+  company_type?: string;
+  net_worth_usd_millions?: number;
+  bio?: string;
+  nationality?: string;
+  email?: string;
+  phone?: string;
+  company_id?: number;
+  expertise?: InvestorExpertise[];
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+};
+
 const ExplorePage = () => {
   const [tab, setTab] = useState<"startups" | "investors">("startups");
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [startups, setStartups] = useState<any[]>([]);
-  const [investors, setInvestors] = useState<any[]>([]);
+  const [startups, setStartups] = useState<StartupRecord[]>([]);
+  const [investors, setInvestors] = useState<InvestorRecord[]>([]);
   const [industries, setIndustries] = useState<string[]>(["All"]);
-  const [selectedStartup, setSelectedStartup] = useState<any | null>(null);
-  const [selectedInvestor, setSelectedInvestor] = useState<any | null>(null);
+  const [selectedStartup, setSelectedStartup] = useState<StartupRecord | null>(null);
+  const [selectedInvestor, setSelectedInvestor] = useState<InvestorRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
@@ -34,10 +79,10 @@ const ExplorePage = () => {
         ]);
         setStartups(startupRes.data || []);
         setInvestors(sharkRes.data || []);
-        const industryNames = ["All", ...(industryRes.data || []).map((i: any) => i.industry_name)];
+        const industryNames = ["All", ...(industryRes.data || []).map((i: IndustryRecord) => i.industry_name)];
         setIndustries(industryNames);
-      } catch (e: any) {
-        setError("Failed to load data. Please try again later.");
+      } catch (fetchError: unknown) {
+        setError(getErrorMessage(fetchError, "Failed to load data. Please try again later."));
       } finally {
         setLoading(false);
       }
@@ -59,7 +104,7 @@ const ExplorePage = () => {
     (inv.company_name || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleStartupSelect = async (startup: any) => {
+  const handleStartupSelect = async (startup: StartupRecord) => {
     try {
       setModalLoading(true);
       setSelectedStartup(startup);
@@ -72,7 +117,7 @@ const ExplorePage = () => {
     }
   };
 
-  const handleInvestorSelect = async (investor: any) => {
+  const handleInvestorSelect = async (investor: InvestorRecord) => {
     try {
       setModalLoading(true);
       setSelectedInvestor(investor);
@@ -252,7 +297,7 @@ const ExplorePage = () => {
                   <div className="mt-4">
                     <p className="text-xs text-muted-foreground mb-2">Expertise</p>
                     <div className="flex flex-wrap gap-2">
-                      {selectedInvestor.expertise.map((item: any) => (
+                      {selectedInvestor.expertise.map((item: InvestorExpertise) => (
                         <span key={item.expertise_id} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
                           {item.domain}
                         </span>
