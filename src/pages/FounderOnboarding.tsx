@@ -10,12 +10,36 @@ import { createFounder, createStartup, createProduct, getIndustries, getLocation
 
 const steps = ["Profile", "Startup", "Products", "Funding", "Review"];
 
+type IndustryRecord = {
+  industry_id: number;
+  industry_name: string;
+};
+
+type LocationRecord = {
+  location_id: number;
+  city: string;
+  country: string;
+};
+
+type ProductCategoryRecord = {
+  category_id: number;
+  category_name: string;
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message || response?.data?.error || fallback;
+  }
+  return fallback;
+};
+
 const FounderOnboarding = () => {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [industries, setIndustries] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [productCategories, setProductCategories] = useState<any[]>([]);
+  const [industries, setIndustries] = useState<IndustryRecord[]>([]);
+  const [locations, setLocations] = useState<LocationRecord[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategoryRecord[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,7 +52,7 @@ const FounderOnboarding = () => {
       .catch(() => {});
   }, []);
 
-  const { register, handleSubmit, control, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, control, watch, trigger, formState: { errors } } = useForm({
     defaultValues: {
       firstName: "", lastName: "", email: "", phone: "", dob: "", gender: "", nationality: "", linkedin: "", bio: "",
       startup: { name: "", tagline: "", industry_id: "", location_id: "", website: "", foundedYear: "", revenue: "", profitLoss: "", employees: "", totalFunding: "", status: "Active" },
@@ -40,30 +64,36 @@ const FounderOnboarding = () => {
   const productFields = useFieldArray({ control, name: "products" });
   const allData = watch();
 
+  // FIX: Use trigger() for proper async RHF validation instead of checking errors synchronously
   const next = async () => {
-    // Validate required fields before advancing
     if (step === 0) {
-      const valid = await handleSubmit(() => {})() !== undefined || !errors.firstName;
-      if (errors.firstName) return;
+      const valid = await trigger("firstName");
+      if (!valid) return;
     }
     if (step === 1) {
-      if (!allData.startup.name || !allData.startup.foundedYear) {
-        // trigger validation display
-        await handleSubmit(() => {})();
-        return;
-      }
+      const valid = await trigger(["startup.name", "startup.foundedYear"]);
+      if (!valid) return;
     }
     setStep((s) => Math.min(s + 1, steps.length - 1));
   };
+
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
+    // FIX: Validate firstName before submitting — empty string is falsy in Python and causes 400
+    if (!allData.firstName?.trim()) {
+      toast({ title: "Error", description: "First name is required. Please go back to Step 1.", variant: "destructive" });
+      setStep(0);
+      return;
+    }
     if (!allData.startup.name) {
       toast({ title: "Error", description: "Startup name is required. Please go back to Step 2.", variant: "destructive" });
+      setStep(1);
       return;
     }
     if (!allData.startup.foundedYear) {
       toast({ title: "Error", description: "Founded year is required. Please go back to Step 2.", variant: "destructive" });
+      setStep(1);
       return;
     }
     try {
@@ -89,7 +119,7 @@ const FounderOnboarding = () => {
 
       // 2. Create founder and link to startup
       await createFounder({
-        first_name: allData.firstName,
+        first_name: allData.firstName.trim(),
         last_name: allData.lastName,
         email: allData.email,
         phone: allData.phone,
@@ -120,8 +150,8 @@ const FounderOnboarding = () => {
 
       toast({ title: "Profile Created!", description: "Your founder profile has been submitted successfully." });
       navigate("/dashboard/founder");
-    } catch (e: any) {
-      toast({ title: "Error", description: e?.response?.data?.error || "Failed to create profile. Please try again.", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Error", description: getErrorMessage(error, "Failed to create profile. Please try again."), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +189,11 @@ const FounderOnboarding = () => {
                 <div className="space-y-5">
                   <h2 className="text-xl font-bold mb-4">Your Profile</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <div><label className={labelClass}>First Name *</label><input {...register("firstName", { required: true })} className={inputClass} placeholder="John" /></div>
+                    <div>
+                      <label className={labelClass}>First Name *</label>
+                      <input {...register("firstName", { required: "First name is required" })} className={inputClass} placeholder="John" />
+                      {errors.firstName && <p className="text-destructive text-xs mt-1">{errors.firstName.message as string}</p>}
+                    </div>
                     <div><label className={labelClass}>Last Name</label><input {...register("lastName")} className={inputClass} placeholder="Doe" /></div>
                     <div><label className={labelClass}>Email</label><input {...register("email")} type="email" className={inputClass} placeholder="john@startup.com" /></div>
                     <div><label className={labelClass}>Phone</label><input {...register("phone")} className={inputClass} placeholder="+1 555 123 4567" /></div>
@@ -191,14 +225,14 @@ const FounderOnboarding = () => {
                       <label className={labelClass}>Industry</label>
                       <select {...register("startup.industry_id")} className={inputClass}>
                         <option value="">Select Industry</option>
-                        {industries.map((i: any) => <option key={i.industry_id} value={i.industry_id}>{i.industry_name}</option>)}
+                        {industries.map((i) => <option key={i.industry_id} value={i.industry_id}>{i.industry_name}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className={labelClass}>Location</label>
                       <select {...register("startup.location_id")} className={inputClass}>
                         <option value="">Select Location</option>
-                        {locations.map((l: any) => <option key={l.location_id} value={l.location_id}>{l.city}, {l.country}</option>)}
+                        {locations.map((l) => <option key={l.location_id} value={l.location_id}>{l.city}, {l.country}</option>)}
                       </select>
                     </div>
                     <div><label className={labelClass}>Website URL</label><input {...register("startup.website")} className={inputClass} placeholder="https://example.com" /></div>
@@ -239,7 +273,7 @@ const FounderOnboarding = () => {
                           <label className={labelClass}>Category</label>
                           <select {...register(`products.${idx}.category_id`)} className={inputClass}>
                             <option value="">Select</option>
-                            {productCategories.map((c: any) => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+                            {productCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
                           </select>
                         </div>
                         <div className="flex items-center gap-3 pt-6">
