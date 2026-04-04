@@ -20,7 +20,8 @@ const InvestorOnboarding = () => {
     getStartups().then(r => setStartups(r.data || [])).catch(() => {});
   }, []);
 
-  const { register, handleSubmit, control, watch, formState: { errors } } = useForm({
+  // FIX: destructure trigger alongside the rest
+  const { register, handleSubmit, control, watch, trigger, formState: { errors } } = useForm({
     defaultValues: {
       firstName: "", lastName: "", email: "", phone: "", dob: "", nationality: "", netWorth: "", bio: "",
       company: { name: "", type: "", website: "", aum: "", foundedYear: "", city: "", state: "", country: "" },
@@ -34,24 +35,27 @@ const InvestorOnboarding = () => {
   const portfolioFields = useFieldArray({ control, name: "portfolio" });
   const allData = watch();
 
+  // FIX: use trigger() for proper async RHF validation instead of checking values manually
   const next = async () => {
     if (step === 0) {
-      if (!allData.firstName || !allData.netWorth) {
-        await handleSubmit(() => {})();
-        return;
-      }
+      const valid = await trigger(["firstName", "netWorth"]);
+      if (!valid) return;
     }
     setStep(s => Math.min(s + 1, steps.length - 1));
   };
+
   const prev = () => setStep(s => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
-    if (!allData.firstName) {
+    // FIX: trim() so whitespace-only strings don't slip past (empty string is falsy in Python)
+    if (!allData.firstName?.trim()) {
       toast({ title: "Error", description: "First name is required. Please go back to Step 1.", variant: "destructive" });
+      setStep(0); // FIX: navigate back to the offending step
       return;
     }
-    if (!allData.netWorth) {
+    if (!allData.netWorth?.trim()) {
       toast({ title: "Error", description: "Net worth is required. Please go back to Step 1.", variant: "destructive" });
+      setStep(0); // FIX: navigate back to the offending step
       return;
     }
     try {
@@ -59,7 +63,7 @@ const InvestorOnboarding = () => {
 
       // 1. Create shark
       const sharkRes = await createShark({
-        first_name: allData.firstName,
+        first_name: allData.firstName.trim(),
         last_name: allData.lastName,
         email: allData.email,
         phone: allData.phone,
