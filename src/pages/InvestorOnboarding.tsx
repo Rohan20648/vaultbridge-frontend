@@ -1,19 +1,40 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import PageTransition from "@/components/PageTransition";
+import HeroBackground from "@/components/HeroBackground";
 import { toast } from "@/hooks/use-toast";
 import { createShark, createPortfolio, createDeal, getStartups } from "@/lib/api";
 
 const steps = ["Profile", "Company", "Expertise", "Portfolio", "Deal", "Review"];
 
-// Helper: convert empty/whitespace strings to null so Python's not b.get() and
-// MySQL DATE/DECIMAL columns never receive an empty string
 const nullify = (v: string | undefined | null): string | null =>
   v?.trim() ? v.trim() : null;
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "11px 16px",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(201,168,76,0.18)",
+  color: "#f0ece2",
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 12,
+  letterSpacing: "0.03em",
+  outline: "none",
+  borderRadius: 0,
+  transition: "border-color 0.2s",
+  boxSizing: "border-box",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 9,
+  letterSpacing: "0.14em",
+  color: "#8892a4",
+  marginBottom: 8,
+};
 
 const InvestorOnboarding = () => {
   const [step, setStep] = useState(0);
@@ -25,37 +46,14 @@ const InvestorOnboarding = () => {
     getStartups().then(r => setStartups(r.data || [])).catch(() => {});
   }, []);
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    trigger,
-    formState: { errors },
-  } = useForm({
+  const { register, handleSubmit, control, watch, trigger, formState: { errors } } = useForm({
     defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      dob: "",
-      nationality: "",
-      netWorth: "",
-      bio: "",
-      company: {
-        name: "", type: "", website: "", aum: "",
-        foundedYear: "", city: "", state: "", country: "",
-      },
+      firstName: "", lastName: "", email: "", phone: "", dob: "",
+      nationality: "", netWorth: "", bio: "",
+      company: { name: "", type: "", website: "", aum: "", foundedYear: "", city: "", state: "", country: "" },
       expertise: [{ domain: "", years: "", isPrimary: false }],
-      portfolio: [{
-        startup_id: "", totalInvested: "", equity: "",
-        status: "Active", firstDate: "", valuation: "", roi: "",
-      }],
-      deal: {
-        startup_id: "", amount: "", equity: "", type: "Equity",
-        date: "", status: "Pending", notes: "",
-        contribution: "", equityShare: "", isLead: false,
-      },
+      portfolio: [{ startup_id: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" }],
+      deal: { startup_id: "", amount: "", equity: "", type: "Equity", date: "", status: "Pending", notes: "", contribution: "", equityShare: "", isLead: false },
     },
   });
 
@@ -63,296 +61,249 @@ const InvestorOnboarding = () => {
   const portfolioFields = useFieldArray({ control, name: "portfolio" });
   const allData = watch();
 
-  // FIX: use trigger() for proper async RHF validation — never check errors synchronously
   const next = async () => {
-    if (step === 0) {
-      const valid = await trigger(["firstName", "netWorth"]);
-      if (!valid) return;
-    }
+    if (step === 0) { const v = await trigger(["firstName", "netWorth"]); if (!v) return; }
     setStep(s => Math.min(s + 1, steps.length - 1));
   };
-
   const prev = () => setStep(s => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
-    // FIX: trim() guard so whitespace-only strings don't slip through
-    if (!allData.firstName?.trim()) {
-      toast({ title: "Error", description: "First name is required.", variant: "destructive" });
-      setStep(0);
-      return;
-    }
-    if (!allData.netWorth?.trim()) {
-      toast({ title: "Error", description: "Net worth is required.", variant: "destructive" });
-      setStep(0);
-      return;
-    }
+    if (!allData.firstName?.trim()) { toast({ title: "Error", description: "First name is required.", variant: "destructive" }); setStep(0); return; }
+    if (!allData.netWorth?.trim())  { toast({ title: "Error", description: "Net worth is required.", variant: "destructive" }); setStep(0); return; }
 
     try {
       setSubmitting(true);
-
-      // ── 1. Create shark ────────────────────────────────────────────────────
-      // FIX: net_worth_usd_millions must be a float — MySQL DECIMAL rejects strings → 400
-      // FIX: all optional string fields must be null not "" — empty string causes
-      //      DB type errors on DATE/DECIMAL columns in strict MySQL mode
-      // NOTE: expertise_domain is accepted by the backend (inserts into shark_expertise)
       const sharkRes = await createShark({
-        first_name:             allData.firstName.trim(),
-        last_name:              nullify(allData.lastName),
-        email:                  nullify(allData.email),
-        phone:                  nullify(allData.phone),
-        date_of_birth:          nullify(allData.dob),
-        nationality:            nullify(allData.nationality),
+        first_name: allData.firstName.trim(),
+        last_name: nullify(allData.lastName),
+        email: nullify(allData.email),
+        phone: nullify(allData.phone),
+        date_of_birth: nullify(allData.dob),
+        nationality: nullify(allData.nationality),
         net_worth_usd_millions: allData.netWorth ? parseFloat(allData.netWorth) : null,
-        bio:                    nullify(allData.bio),
-        expertise_domain:       nullify(allData.expertise[0]?.domain),
+        bio: nullify(allData.bio),
+        expertise_domain: nullify(allData.expertise[0]?.domain),
       });
-
       const shark_id = sharkRes.data?.shark_id;
-      // FIX: explicit guard — if shark creation fails silently, don't proceed
-      if (!shark_id) throw new Error("Investor creation failed — no shark_id returned.");
+      if (!shark_id) throw new Error("Investor creation failed.");
       localStorage.setItem("vaultbridge_investor_shark_id", String(shark_id));
 
-      // ── 2. Portfolio entries ───────────────────────────────────────────────
-      // FIX: startup_id must be parseInt — backend passes it directly to MySQL INT column
-      // FIX: firstDate must be null not "" — MySQL DATE column rejects empty strings
       for (const p of allData.portfolio) {
         if (p.startup_id && shark_id) {
           await createPortfolio({
-            shark_id,
-            startup_id:             parseInt(p.startup_id),
-            total_invested_usd:     p.totalInvested ? parseFloat(p.totalInvested) : null,
+            shark_id, startup_id: parseInt(p.startup_id),
+            total_invested_usd: p.totalInvested ? parseFloat(p.totalInvested) : null,
             current_equity_percent: p.equity ? parseFloat(p.equity) : null,
-            portfolio_status:       p.status || "Active",
-            first_investment_date:  nullify(p.firstDate),
-            current_valuation_usd:  p.valuation ? parseFloat(p.valuation) : null,
-            roi_percent:            p.roi ? parseFloat(p.roi) : null,
+            portfolio_status: p.status || "Active",
+            first_investment_date: nullify(p.firstDate),
+            current_valuation_usd: p.valuation ? parseFloat(p.valuation) : null,
+            roi_percent: p.roi ? parseFloat(p.roi) : null,
           });
         }
       }
 
-      // ── 3. Deal ────────────────────────────────────────────────────────────
-      // FIX: startup_id must be parseInt — same reason as above
-      // FIX: handshake_date and deal_notes must be null not "" for DATE/TEXT columns
       if (allData.deal.startup_id) {
         await createDeal({
-          startup_id:          parseInt(allData.deal.startup_id),
-          deal_amount_usd:     allData.deal.amount ? parseFloat(allData.deal.amount) : null,
+          startup_id: parseInt(allData.deal.startup_id),
+          deal_amount_usd: allData.deal.amount ? parseFloat(allData.deal.amount) : null,
           deal_equity_percent: allData.deal.equity ? parseFloat(allData.deal.equity) : null,
-          deal_type:           allData.deal.type || "Equity",
-          handshake_date:      nullify(allData.deal.date),
-          deal_status:         allData.deal.status || "Handshake",
-          deal_notes:          nullify(allData.deal.notes),
+          deal_type: allData.deal.type || "Equity",
+          handshake_date: nullify(allData.deal.date),
+          deal_status: allData.deal.status || "Handshake",
+          deal_notes: nullify(allData.deal.notes),
           sharks: [{
             shark_id,
             contribution: allData.deal.contribution ? parseFloat(allData.deal.contribution) : 0,
-            equity:       allData.deal.equityShare ? parseFloat(allData.deal.equityShare) : 0,
-            is_lead:      allData.deal.isLead ? 1 : 0,
+            equity: allData.deal.equityShare ? parseFloat(allData.deal.equityShare) : 0,
+            is_lead: allData.deal.isLead ? 1 : 0,
           }],
         });
       }
 
-      toast({ title: "Profile Created!", description: "Your investor profile has been submitted successfully." });
+      toast({ title: "Profile Created!", description: "Your investor profile has been submitted." });
       navigate("/dashboard/investor");
-
     } catch (e: any) {
-      toast({
-        title: "Error",
-        description: e?.response?.data?.error || e?.message || "Failed to create profile. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: e?.response?.data?.error || e?.message || "Failed to create profile.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const inputClass =
-    "w-full px-4 py-2.5 rounded-lg bg-muted border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all";
-  const labelClass = "block text-sm font-medium text-muted-foreground mb-1.5";
+  const Field = ({ label, name, placeholder, type = "text" }: { label: string; name: any; placeholder?: string; type?: string }) => (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <input
+        {...register(name)}
+        type={type}
+        style={{ ...inputStyle, ...(type === "date" ? { colorScheme: "dark" } : {}) }}
+        placeholder={placeholder}
+        onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+        onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+      />
+    </div>
+  );
+
+  const Select = ({ label, name, options }: { label: string; name: any; options: string[] }) => (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <select {...register(name)} style={{ ...inputStyle, cursor: "pointer" }}>
+        <option value="" style={{ background: "#0f1420" }}>Select</option>
+        {options.map(o => <option key={o} style={{ background: "#0f1420" }}>{o}</option>)}
+      </select>
+    </div>
+  );
 
   return (
     <>
       <Navbar />
-      <PageTransition>
-        <div className="min-h-screen pt-20 pb-16">
-          <div className="container mx-auto px-4 max-w-3xl">
+      <div
+        style={{
+          position: "relative",
+          minHeight: "100vh",
+          background: "#0a0d14",
+          color: "#f0ece2",
+          fontFamily: "'Cormorant Garamond', Georgia, serif",
+          overflow: "hidden",
+        }}
+      >
+        <HeroBackground opacity={0.4} />
 
-            {/* Step indicator */}
-            <div className="mb-10">
-              <div className="flex items-center justify-between mb-3">
-                {steps.map((s, i) => (
-                  <div key={s} className="flex items-center">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
-                        i < step
-                          ? "bg-success text-success-foreground"
-                          : i === step
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {i < step ? <Check size={14} /> : i + 1}
-                    </div>
-                    {i < steps.length - 1 && (
-                      <div className={`hidden sm:block w-8 md:w-16 h-0.5 mx-1 ${i < step ? "bg-success" : "bg-border"}`} />
-                    )}
+        <div style={{ position: "relative", zIndex: 2, maxWidth: 760, margin: "0 auto", padding: "104px 40px 80px" }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#c9a84c", marginBottom: 12 }}>
+            — INVESTOR ONBOARDING —
+          </div>
+          <h1 style={{ fontSize: "clamp(32px, 3.5vw, 48px)", fontWeight: 300, lineHeight: 1.05, letterSpacing: "-0.01em", marginBottom: 48 }}>
+            Join as an <em style={{ color: "#e8c97a" }}>Investor</em>
+          </h1>
+
+          {/* Step indicator */}
+          <div style={{ marginBottom: 40 }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+              {steps.map((s, i) => (
+                <div key={s} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? 1 : "none" }}>
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      border: `1px solid ${i < step ? "#c9a84c" : i === step ? "#e8c97a" : "rgba(255,255,255,0.1)"}`,
+                      background: i < step ? "rgba(201,168,76,0.2)" : i === step ? "rgba(232,201,122,0.12)" : "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      color: i < step ? "#c9a84c" : i === step ? "#e8c97a" : "#8892a4",
+                      fontFamily: "'DM Mono', monospace",
+                      fontSize: 9,
+                      transition: "all 0.3s",
+                    }}
+                  >
+                    {i < step ? <Check size={10} /> : i + 1}
                   </div>
-                ))}
-              </div>
-              <p className="text-sm text-muted-foreground text-center">
-                Step {step + 1}: {steps[step]}
-              </p>
+                  {i < steps.length - 1 && (
+                    <div style={{ flex: 1, height: 1, background: i < step ? "rgba(201,168,76,0.4)" : "rgba(255,255,255,0.07)", margin: "0 6px" }} />
+                  )}
+                </div>
+              ))}
             </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.16em", color: "#8892a4", textAlign: "center" }}>
+              STEP {step + 1} / {steps.length} — {steps[step].toUpperCase()}
+            </div>
+          </div>
 
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-              className="glass-card rounded-2xl p-8"
-            >
+          {/* Card */}
+          <div style={{ background: "#0f1420", border: "1px solid rgba(201,168,76,0.15)", padding: 48 }}>
 
-              {/* ── Step 0: Profile ── */}
-              {step === 0 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Your Profile</h2>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={labelClass}>First Name *</label>
-                      <input
-                        {...register("firstName", { required: "First name is required" })}
-                        className={inputClass}
-                        placeholder="Sarah"
-                      />
-                      {errors.firstName && (
-                        <p className="text-destructive text-xs mt-1">{errors.firstName.message as string}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className={labelClass}>Last Name</label>
-                      <input {...register("lastName")} className={inputClass} placeholder="Chen" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Email</label>
-                      <input {...register("email")} type="email" className={inputClass} placeholder="sarah@apexvc.com" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Phone</label>
-                      <input {...register("phone")} className={inputClass} placeholder="+1 555 987 6543" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Date of Birth</label>
-                      <input {...register("dob")} type="date" className={inputClass} />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Nationality</label>
-                      <input {...register("nationality")} className={inputClass} placeholder="American" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Net Worth (USD millions) *</label>
-                      <input
-                        {...register("netWorth", { required: "Net worth is required" })}
-                        className={inputClass}
-                        placeholder="340"
-                      />
-                      {errors.netWorth && (
-                        <p className="text-destructive text-xs mt-1">{errors.netWorth.message as string}</p>
-                      )}
-                    </div>
-                  </div>
+            {/* Step 0: Profile */}
+            {step === 0 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Your Profile</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 24px" }}>
                   <div>
-                    <label className={labelClass}>Bio</label>
-                    <textarea
-                      {...register("bio")}
-                      className={inputClass + " min-h-[100px]"}
-                      placeholder="Describe your investment philosophy..."
+                    <label style={labelStyle}>FIRST NAME *</label>
+                    <input
+                      {...register("firstName", { required: "Required" })}
+                      style={inputStyle} placeholder="Sarah"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                    {errors.firstName && <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#e05c5c", marginTop: 6 }}>{errors.firstName.message as string}</p>}
+                  </div>
+                  <Field label="LAST NAME" name="lastName" placeholder="Chen" />
+                  <Field label="EMAIL" name="email" placeholder="sarah@apexvc.com" type="email" />
+                  <Field label="PHONE" name="phone" placeholder="+1 555 987 6543" />
+                  <Field label="DATE OF BIRTH" name="dob" type="date" />
+                  <Field label="NATIONALITY" name="nationality" placeholder="American" />
+                  <div>
+                    <label style={labelStyle}>NET WORTH (USD MILLIONS) *</label>
+                    <input
+                      {...register("netWorth", { required: "Required" })}
+                      style={inputStyle} placeholder="340"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                    {errors.netWorth && <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#e05c5c", marginTop: 6 }}>{errors.netWorth.message as string}</p>}
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}>
+                    <label style={labelStyle}>BIO</label>
+                    <textarea {...register("bio")} style={{ ...inputStyle, minHeight: 100, resize: "vertical" }} placeholder="Describe your investment philosophy…"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                     />
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ── Step 1: Company ── */}
-              {step === 1 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Your Company (Optional)</h2>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={labelClass}>Company Name</label>
-                      <input {...register("company.name")} className={inputClass} placeholder="Apex Ventures" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Company Type</label>
-                      <select {...register("company.type")} className={inputClass}>
-                        <option value="">Select</option>
-                        {["VC", "PE", "Family Office", "Conglomerate", "Angel", "Corporate"].map(t => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Website</label>
-                      <input {...register("company.website")} className={inputClass} placeholder="https://apexventures.com" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>AUM (USD millions)</label>
-                      <input {...register("company.aum")} className={inputClass} placeholder="850" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>City</label>
-                      <input {...register("company.city")} className={inputClass} placeholder="New York" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Country</label>
-                      <input {...register("company.country")} className={inputClass} placeholder="United States" />
-                    </div>
-                  </div>
+            {/* Step 1: Company */}
+            {step === 1 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Your Company <span style={{ fontSize: 14, color: "#8892a4", fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }}>(Optional)</span></h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 24px" }}>
+                  <Field label="COMPANY NAME" name="company.name" placeholder="Apex Ventures" />
+                  <Select label="COMPANY TYPE" name="company.type" options={["VC","PE","Family Office","Conglomerate","Angel","Corporate"]} />
+                  <Field label="WEBSITE" name="company.website" placeholder="https://apexventures.com" />
+                  <Field label="AUM (USD MILLIONS)" name="company.aum" placeholder="850" />
+                  <Field label="CITY" name="company.city" placeholder="New York" />
+                  <Field label="COUNTRY" name="company.country" placeholder="United States" />
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ── Step 2: Expertise ── */}
-              {step === 2 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Your Expertise</h2>
+            {/* Step 2: Expertise */}
+            {step === 2 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Your Expertise</h2>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {expertiseFields.fields.map((field, idx) => (
-                    <div
-                      key={field.id}
-                      className="p-4 rounded-xl bg-accent/30 border border-border/50 space-y-4"
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Expertise {idx + 1}</span>
+                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c" }}>EXPERTISE {idx + 1}</span>
                         {idx > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => expertiseFields.remove(idx)}
-                            className="text-destructive"
-                          >
-                            <Trash2 size={16} />
+                          <button type="button" onClick={() => expertiseFields.remove(idx)}
+                            style={{ background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}>
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
-                      <div className="grid sm:grid-cols-3 gap-4">
+                      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: "0 20px", alignItems: "end" }}>
                         <div>
-                          <label className={labelClass}>Domain</label>
-                          <input
-                            {...register(`expertise.${idx}.domain`)}
-                            className={inputClass}
-                            placeholder="Machine Learning"
+                          <label style={labelStyle}>DOMAIN</label>
+                          <input {...register(`expertise.${idx}.domain`)} style={inputStyle} placeholder="Machine Learning"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Years of Experience</label>
-                          <input
-                            {...register(`expertise.${idx}.years`)}
-                            className={inputClass}
-                            placeholder="12"
+                          <label style={labelStyle}>YEARS EXP</label>
+                          <input {...register(`expertise.${idx}.years`)} style={inputStyle} placeholder="12"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
-                        <div className="flex items-center gap-3 pt-6">
-                          <input
-                            type="checkbox"
-                            {...register(`expertise.${idx}.isPrimary`)}
-                            className="w-4 h-4 rounded"
-                          />
-                          <label className="text-sm text-muted-foreground">Is Primary</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 2 }}>
+                          <input type="checkbox" {...register(`expertise.${idx}.isPrimary`)}
+                            style={{ width: 14, height: 14, accentColor: "#c9a84c", cursor: "pointer" }} />
+                          <label style={{ ...labelStyle, marginBottom: 0, fontSize: 9 }}>PRIMARY</label>
                         </div>
                       </div>
                     </div>
@@ -360,92 +311,77 @@ const InvestorOnboarding = () => {
                   <button
                     type="button"
                     onClick={() => expertiseFields.append({ domain: "", years: "", isPrimary: false })}
-                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.1em", padding: 0 }}
                   >
-                    <Plus size={14} /> Add Expertise
+                    <Plus size={12} /> ADD EXPERTISE
                   </button>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ── Step 3: Portfolio ── */}
-              {step === 3 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Portfolio Investments</h2>
+            {/* Step 3: Portfolio */}
+            {step === 3 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Portfolio Investments</h2>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {portfolioFields.fields.map((field, idx) => (
-                    <div
-                      key={field.id}
-                      className="p-4 rounded-xl bg-accent/30 border border-border/50 space-y-4"
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Investment {idx + 1}</span>
+                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c" }}>INVESTMENT {idx + 1}</span>
                         {idx > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => portfolioFields.remove(idx)}
-                            className="text-destructive"
-                          >
-                            <Trash2 size={16} />
+                          <button type="button" onClick={() => portfolioFields.remove(idx)}
+                            style={{ background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}>
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
-                      <div className="grid sm:grid-cols-2 gap-4">
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
                         <div>
-                          <label className={labelClass}>Startup</label>
-                          <select {...register(`portfolio.${idx}.startup_id`)} className={inputClass}>
-                            <option value="">Select Startup</option>
-                            {startups.map((s: any) => (
-                              <option key={s.startup_id} value={s.startup_id}>
-                                {s.startup_name}
-                              </option>
-                            ))}
+                          <label style={labelStyle}>STARTUP</label>
+                          <select {...register(`portfolio.${idx}.startup_id`)} style={{ ...inputStyle, cursor: "pointer" }}>
+                            <option value="" style={{ background: "#0f1420" }}>Select Startup</option>
+                            {startups.map((s: any) => <option key={s.startup_id} value={s.startup_id} style={{ background: "#0f1420" }}>{s.startup_name}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className={labelClass}>Total Invested (USD)</label>
-                          <input
-                            {...register(`portfolio.${idx}.totalInvested`)}
-                            className={inputClass}
-                            placeholder="2000000"
+                          <label style={labelStyle}>TOTAL INVESTED (USD)</label>
+                          <input {...register(`portfolio.${idx}.totalInvested`)} style={inputStyle} placeholder="2000000"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Current Equity %</label>
-                          <input
-                            {...register(`portfolio.${idx}.equity`)}
-                            className={inputClass}
-                            placeholder="15"
+                          <label style={labelStyle}>CURRENT EQUITY %</label>
+                          <input {...register(`portfolio.${idx}.equity`)} style={inputStyle} placeholder="15"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Portfolio Status</label>
-                          <select {...register(`portfolio.${idx}.status`)} className={inputClass}>
-                            {["Active", "Exited", "Written Off"].map(s => (
-                              <option key={s}>{s}</option>
-                            ))}
+                          <label style={labelStyle}>STATUS</label>
+                          <select {...register(`portfolio.${idx}.status`)} style={{ ...inputStyle, cursor: "pointer" }}>
+                            {["Active","Exited","Written Off"].map(s => <option key={s} style={{ background: "#0f1420" }}>{s}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className={labelClass}>First Investment Date</label>
-                          <input
-                            {...register(`portfolio.${idx}.firstDate`)}
-                            type="date"
-                            className={inputClass}
+                          <label style={labelStyle}>FIRST INVESTMENT DATE</label>
+                          <input {...register(`portfolio.${idx}.firstDate`)} type="date" style={{ ...inputStyle, colorScheme: "dark" }}
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Current Valuation (USD)</label>
-                          <input
-                            {...register(`portfolio.${idx}.valuation`)}
-                            className={inputClass}
-                            placeholder="12000000"
+                          <label style={labelStyle}>CURRENT VALUATION (USD)</label>
+                          <input {...register(`portfolio.${idx}.valuation`)} style={inputStyle} placeholder="12000000"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>ROI %</label>
-                          <input
-                            {...register(`portfolio.${idx}.roi`)}
-                            className={inputClass}
-                            placeholder="145"
+                          <label style={labelStyle}>ROI %</label>
+                          <input {...register(`portfolio.${idx}.roi`)} style={inputStyle} placeholder="145"
+                            onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                            onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                       </div>
@@ -453,189 +389,143 @@ const InvestorOnboarding = () => {
                   ))}
                   <button
                     type="button"
-                    onClick={() =>
-                      portfolioFields.append({
-                        startup_id: "", totalInvested: "", equity: "",
-                        status: "Active", firstDate: "", valuation: "", roi: "",
-                      })
-                    }
-                    className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                    onClick={() => portfolioFields.append({ startup_id: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" })}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.1em", padding: 0 }}
                   >
-                    <Plus size={14} /> Add Another Investment
+                    <Plus size={12} /> ADD INVESTMENT
                   </button>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ── Step 4: Deal ── */}
-              {step === 4 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Add a Deal (Optional)</h2>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className={labelClass}>Startup</label>
-                      <select {...register("deal.startup_id")} className={inputClass}>
-                        <option value="">Select Startup</option>
-                        {startups.map((s: any) => (
-                          <option key={s.startup_id} value={s.startup_id}>
-                            {s.startup_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Deal Amount (USD)</label>
-                      <input {...register("deal.amount")} className={inputClass} placeholder="1500000" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Deal Equity %</label>
-                      <input {...register("deal.equity")} className={inputClass} placeholder="10" />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Deal Type</label>
-                      <select {...register("deal.type")} className={inputClass}>
-                        {["Equity", "Royalty", "Loan", "Convertible Note", "Hybrid"].map(t => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Handshake Date</label>
-                      <input {...register("deal.date")} type="date" className={inputClass} />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Deal Status</label>
-                      <select {...register("deal.status")} className={inputClass}>
-                        {["Pending", "Handshake", "Active", "Closed", "Cancelled"].map(s => (
-                          <option key={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Your Contribution (USD)</label>
-                      <input {...register("deal.contribution")} className={inputClass} />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Your Equity Share %</label>
-                      <input {...register("deal.equityShare")} className={inputClass} />
-                    </div>
-                    <div className="flex items-center gap-3 pt-6">
-                      <input type="checkbox" {...register("deal.isLead")} className="w-4 h-4 rounded" />
-                      <label className="text-sm text-muted-foreground">Is Lead Investor</label>
-                    </div>
+            {/* Step 4: Deal */}
+            {step === 4 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Add a Deal <span style={{ fontSize: 14, color: "#8892a4", fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }}>(Optional)</span></h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 24px" }}>
+                  <div>
+                    <label style={labelStyle}>STARTUP</label>
+                    <select {...register("deal.startup_id")} style={{ ...inputStyle, cursor: "pointer" }}>
+                      <option value="" style={{ background: "#0f1420" }}>Select Startup</option>
+                      {startups.map((s: any) => <option key={s.startup_id} value={s.startup_id} style={{ background: "#0f1420" }}>{s.startup_name}</option>)}
+                    </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Deal Notes</label>
-                    <textarea
-                      {...register("deal.notes")}
-                      className={inputClass + " min-h-[80px]"}
-                      placeholder="Additional deal terms or notes..."
+                    <label style={labelStyle}>DEAL AMOUNT (USD)</label>
+                    <input {...register("deal.amount")} style={inputStyle} placeholder="1500000"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>DEAL EQUITY %</label>
+                    <input {...register("deal.equity")} style={inputStyle} placeholder="10"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                  </div>
+                  <Select label="DEAL TYPE" name="deal.type" options={["Equity","Royalty","Loan","Convertible Note","Hybrid"]} />
+                  <div>
+                    <label style={labelStyle}>HANDSHAKE DATE</label>
+                    <input {...register("deal.date")} type="date" style={{ ...inputStyle, colorScheme: "dark" }}
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                  </div>
+                  <Select label="DEAL STATUS" name="deal.status" options={["Pending","Handshake","Active","Closed","Cancelled"]} />
+                  <div>
+                    <label style={labelStyle}>YOUR CONTRIBUTION (USD)</label>
+                    <input {...register("deal.contribution")} style={inputStyle}
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>YOUR EQUITY SHARE %</label>
+                    <input {...register("deal.equityShare")} style={inputStyle}
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
+                    />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <input type="checkbox" {...register("deal.isLead")}
+                      style={{ width: 16, height: 16, accentColor: "#c9a84c", cursor: "pointer" }} />
+                    <label style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>IS LEAD INVESTOR</label>
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}>
+                    <label style={labelStyle}>DEAL NOTES</label>
+                    <textarea {...register("deal.notes")} style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} placeholder="Additional deal terms or notes…"
+                      onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
+                      onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                     />
                   </div>
                 </div>
-              )}
-
-              {/* ── Step 5: Review ── */}
-              {step === 5 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-4">Review & Submit</h2>
-                  <div className="space-y-4">
-                    <ReviewSection
-                      title="Profile"
-                      data={`${allData.firstName} ${allData.lastName} · ${allData.email} · $${allData.netWorth}M net worth`}
-                      onEdit={() => setStep(0)}
-                    />
-                    <ReviewSection
-                      title="Company"
-                      data={`${allData.company.name || "None"} · ${allData.company.type || "—"}`}
-                      onEdit={() => setStep(1)}
-                    />
-                    <ReviewSection
-                      title="Expertise"
-                      data={
-                        allData.expertise
-                          .map(e => `${e.domain} (${e.years}yr)`)
-                          .filter(e => e.trim() !== " (yr)")
-                          .join(", ") || "Not specified"
-                      }
-                      onEdit={() => setStep(2)}
-                    />
-                    <ReviewSection
-                      title="Portfolio"
-                      data={`${allData.portfolio.filter(p => p.startup_id).length} investment(s)`}
-                      onEdit={() => setStep(3)}
-                    />
-                    <ReviewSection
-                      title="Deal"
-                      data={`${
-                        allData.deal.startup_id
-                          ? startups.find(s => String(s.startup_id) === String(allData.deal.startup_id))?.startup_name ||
-                            `Startup ID ${allData.deal.startup_id}`
-                          : "None"
-                      } · ${allData.deal.type}`}
-                      onEdit={() => setStep(4)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* ── Navigation ── */}
-              <div className="flex justify-between mt-8 pt-6 border-t border-border/30">
-                <button
-                  type="button"
-                  onClick={prev}
-                  disabled={step === 0}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft size={16} /> Back
-                </button>
-
-                {step < steps.length - 1 ? (
-                  <button
-                    type="button"
-                    onClick={next}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                  >
-                    Next <ChevronRight size={16} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit(onSubmit)}
-                    disabled={submitting}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors disabled:opacity-70"
-                  >
-                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                    Submit & Create Profile
-                  </button>
-                )}
               </div>
+            )}
 
-            </motion.div>
+            {/* Step 5: Review */}
+            {step === 5 && (
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Review & Submit</h2>
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, background: "rgba(201,168,76,0.12)" }}>
+                  {[
+                    { title: "Profile",   data: `${allData.firstName} ${allData.lastName} · ${allData.email} · $${allData.netWorth}M net worth`, editStep: 0 },
+                    { title: "Company",   data: `${allData.company.name || "None"} · ${allData.company.type || "—"}`, editStep: 1 },
+                    { title: "Expertise", data: allData.expertise.map(e => `${e.domain} (${e.years}yr)`).filter(e => e.trim() !== " (yr)").join(", ") || "Not specified", editStep: 2 },
+                    { title: "Portfolio", data: `${allData.portfolio.filter(p => p.startup_id).length} investment(s)`, editStep: 3 },
+                    { title: "Deal",      data: allData.deal.startup_id ? `${startups.find(s => String(s.startup_id) === String(allData.deal.startup_id))?.startup_name || `Startup #${allData.deal.startup_id}`} · ${allData.deal.type}` : "None", editStep: 4 },
+                  ].map(({ title, data, editStep }) => (
+                    <div key={title} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "20px 24px", background: "#0f1420" }}>
+                      <div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c", marginBottom: 8 }}>{title.toUpperCase()}</div>
+                        <div style={{ fontSize: 15, fontWeight: 300, color: "#8892a4" }}>{data}</div>
+                      </div>
+                      <button onClick={() => setStep(editStep)}
+                        style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", flexShrink: 0, marginLeft: 16 }}>
+                        EDIT
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Navigation */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 40, paddingTop: 28, borderTop: "1px solid rgba(201,168,76,0.12)" }}>
+              <button
+                type="button" onClick={prev} disabled={step === 0}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "none", border: "none", color: step === 0 ? "rgba(136,146,164,0.3)" : "#8892a4", cursor: step === 0 ? "default" : "pointer", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: "0.1em", padding: 0 }}
+              >
+                <ChevronLeft size={14} /> BACK
+              </button>
+
+              {step < steps.length - 1 ? (
+                <button
+                  type="button" onClick={next}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 32px", border: "1px solid #c9a84c", background: "transparent", color: "#e8c97a", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: "0.12em", cursor: "pointer", transition: "background 0.3s" }}
+                  onMouseOver={e => (e.currentTarget.style.background = "rgba(201,168,76,0.1)")}
+                  onMouseOut={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  NEXT <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button
+                  type="button" onClick={handleSubmit(onSubmit)} disabled={submitting}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 32px", border: "1px solid #c9a84c", background: "rgba(201,168,76,0.12)", color: "#e8c97a", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: "0.12em", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1, transition: "background 0.3s" }}
+                  onMouseOver={e => { if (!submitting) e.currentTarget.style.background = "rgba(201,168,76,0.2)"; }}
+                  onMouseOut={e => (e.currentTarget.style.background = "rgba(201,168,76,0.12)")}
+                >
+                  {submitting ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={14} />}
+                  {submitting ? "SUBMITTING…" : "SUBMIT PROFILE"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </PageTransition>
+      </div>
+      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </>
   );
 };
-
-const ReviewSection = ({
-  title,
-  data,
-  onEdit,
-}: {
-  title: string;
-  data: string;
-  onEdit: () => void;
-}) => (
-  <div className="flex items-start justify-between p-4 rounded-xl bg-accent/30 border border-border/50">
-    <div>
-      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-      <p className="text-sm text-muted-foreground mt-1">{data}</p>
-    </div>
-    <button onClick={onEdit} className="text-xs text-primary hover:underline shrink-0 ml-4">
-      Edit
-    </button>
-  </div>
-);
 
 export default InvestorOnboarding;
