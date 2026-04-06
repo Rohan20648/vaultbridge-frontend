@@ -1,7 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { Menu, X } from "lucide-react";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -9,74 +8,143 @@ const Navbar = () => {
   const isDashboard = location.pathname.startsWith("/dashboard");
   if (isDashboard) return null;
 
-  return (
-    <motion.nav
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      className="fixed top-0 left-0 right-0 z-50 border-b border-border/50"
-      style={{ background: "hsla(222,47%,6%,0.85)", backdropFilter: "blur(12px)" }}
-    >
-      <div className="container mx-auto flex items-center justify-between h-16 px-4">
-        <Link to="/" className="text-xl font-bold tracking-tight">
-          <span className="gradient-text">Vault</span>
-          <span className="text-foreground">Bridge</span>
-        </Link>
+  const navLinks = [
+    { label: "ABOUT",     to: "/#about" },
+    { label: "STARTUPS",  to: "/explore" },
+    { label: "INVESTORS", to: "/explore" },
+  ];
 
-        <div className="hidden md:flex items-center gap-8">
-          {[
-            { label: "About", to: "/#about" },
-            { label: "Startups", to: "/explore" },
-            { label: "Investors", to: "/explore" },
-            { label: "Login", to: "/join" },
-          ].map((l) => (
+  return (
+    <nav
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 56px",
+        height: 68,
+        background: "rgba(10,13,20,0.92)",
+        backdropFilter: "blur(24px)",
+        borderBottom: "1px solid rgba(201,168,76,0.18)",
+        fontFamily: "'DM Mono', monospace",
+      }}
+    >
+      {/* Logo */}
+      <Link
+        to="/"
+        style={{
+          fontSize: 19,
+          fontWeight: 600,
+          letterSpacing: "0.12em",
+          color: "#e8c97a",
+          textDecoration: "none",
+          fontFamily: "'Cormorant Garamond', Georgia, serif",
+        }}
+      >
+        VAULTBRIDGE
+      </Link>
+
+      {/* Desktop nav */}
+      <div
+        className="hidden md:flex"
+        style={{ display: "flex", gap: 40, alignItems: "center" }}
+      >
+        {navLinks.map((l) => (
+          <Link
+            key={l.label}
+            to={l.to}
+            style={{
+              fontSize: 11,
+              letterSpacing: "0.1em",
+              color: "#8892a4",
+              textDecoration: "none",
+              transition: "color 0.2s",
+            }}
+            onMouseOver={e => (e.currentTarget.style.color = "#f0ece2")}
+            onMouseOut={e => (e.currentTarget.style.color = "#8892a4")}
+          >
+            {l.label}
+          </Link>
+        ))}
+        <Link
+          to="/join"
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            padding: "11px 28px",
+            border: "1px solid #c9a84c",
+            background: "transparent",
+            color: "#e8c97a",
+            textDecoration: "none",
+            transition: "all 0.3s",
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = "rgba(201,168,76,0.1)")}
+          onMouseOut={e => (e.currentTarget.style.background = "transparent")}
+        >
+          JOIN THE VAULT
+        </Link>
+      </div>
+
+      {/* Mobile hamburger */}
+      <button
+        onClick={() => setMobileOpen(!mobileOpen)}
+        style={{
+          display: "none",
+          background: "none",
+          border: "none",
+          color: "#e8c97a",
+          cursor: "pointer",
+        }}
+        className="md-hamburger"
+      >
+        {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+      </button>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: 68,
+            left: 0,
+            right: 0,
+            background: "rgba(10,13,20,0.98)",
+            borderBottom: "1px solid rgba(201,168,76,0.18)",
+            padding: "24px 40px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+          }}
+        >
+          {[...navLinks, { label: "JOIN THE VAULT", to: "/join" }].map((l) => (
             <Link
               key={l.label}
               to={l.to}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.1em",
+                color: "#8892a4",
+                textDecoration: "none",
+              }}
+              onClick={() => setMobileOpen(false)}
             >
               {l.label}
             </Link>
           ))}
-          <Link
-            to="/join"
-            className="text-sm font-medium px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Join the Ecosystem
-          </Link>
         </div>
-
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="md:hidden text-foreground">
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-
-      {mobileOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="md:hidden border-t border-border/50 px-4 pb-4 pt-2 space-y-3"
-          style={{ background: "hsla(222,47%,6%,0.95)" }}
-        >
-          {["About", "Startups", "Investors", "Login"].map((l) => (
-            <Link
-              key={l}
-              to={l === "Login" ? "/join" : "/explore"}
-              className="block text-sm text-muted-foreground py-2"
-              onClick={() => setMobileOpen(false)}
-            >
-              {l}
-            </Link>
-          ))}
-          <Link
-            to="/join"
-            className="block text-center text-sm font-medium px-5 py-2.5 rounded-lg bg-primary text-primary-foreground"
-            onClick={() => setMobileOpen(false)}
-          >
-            Join the Ecosystem
-          </Link>
-        </motion.div>
       )}
-    </motion.nav>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .md-hamburger { display: block !important; }
+          nav > div.hidden { display: none !important; }
+        }
+      `}</style>
+    </nav>
   );
 };
 
