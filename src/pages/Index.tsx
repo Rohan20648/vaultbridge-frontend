@@ -731,6 +731,8 @@ const Homepage = () => {
   const [sharks, setSharks] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [heroVisible, setHeroVisible] = useState(false);
+  const [introComplete, setIntroComplete] = useState(false);
+  const [introPhase, setIntroPhase] = useState<"dial"|"clunk"|"open"|"done">("dial");
 
   const process = useReveal();
   const portfolio = useReveal();
@@ -742,7 +744,19 @@ const Homepage = () => {
   const fundingCount = useCounter(2.4, 1);
 
   useEffect(() => {
-    setTimeout(() => setHeroVisible(true), 100);
+    // Intro sequence timing:
+    // 0ms   → dial spinning (phase: "dial")
+    // 1400ms → clunk/stop   (phase: "clunk")
+    // 2000ms → door opens   (phase: "open")
+    // 3200ms → hero reveals (phase: "done") + heroVisible
+    const t1 = setTimeout(() => setIntroPhase("clunk"), 1400);
+    const t2 = setTimeout(() => setIntroPhase("open"),  2000);
+    const t3 = setTimeout(() => { setIntroPhase("done"); setIntroComplete(true); }, 3200);
+    const t4 = setTimeout(() => setHeroVisible(true), 3400);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, []);
+
+  useEffect(() => {
     Promise.all([getStartups(), getSharks(), getDeals()])
       .then(([s, sh, d]) => {
         setStartups((s.data || []).slice(0, 6));
@@ -779,6 +793,152 @@ const Homepage = () => {
 
   return (
     <div className="min-h-screen" style={{ background: "#0a0d14", color: "#f0ece2", fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
+
+      {/* ── INTRO OVERLAY ── */}
+      {!introComplete && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "#05070c",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          opacity: introPhase === "done" ? 0 : 1,
+          transition: introPhase === "done" ? "opacity 0.9s ease" : "none",
+          pointerEvents: introPhase === "done" ? "none" : "all",
+        }}>
+          {/* Wordmark */}
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: "0.28em",
+            color: "#c9a84c", marginBottom: 56,
+            opacity: introPhase === "dial" ? 1 : introPhase === "clunk" ? 1 : 0,
+            transition: "opacity 0.4s",
+          }}>VAULTBRIDGE</div>
+
+          {/* Dial SVG */}
+          <div style={{ position: "relative", width: 180, height: 180 }}>
+            {/* Outer ring */}
+            <svg width="180" height="180" viewBox="0 0 180 180" style={{ position: "absolute", inset: 0 }}>
+              {/* Tick marks */}
+              {Array.from({ length: 40 }).map((_, i) => {
+                const angle = (i / 40) * Math.PI * 2;
+                const isMajor = i % 5 === 0;
+                const r1 = 84, r2 = isMajor ? 74 : 78;
+                return (
+                  <line key={i}
+                    x1={90 + Math.cos(angle) * r1} y1={90 + Math.sin(angle) * r1}
+                    x2={90 + Math.cos(angle) * r2} y2={90 + Math.sin(angle) * r2}
+                    stroke={isMajor ? "#c9a84c" : "#5a4820"} strokeWidth={isMajor ? 2 : 1}
+                  />
+                );
+              })}
+              {/* Outer ring circle */}
+              <circle cx="90" cy="90" r="86" fill="none" stroke="#c9a84c" strokeWidth="1.5" opacity="0.6" />
+              {/* Inner ring */}
+              <circle cx="90" cy="90" r="68" fill="none" stroke="#3a2e12" strokeWidth="1" />
+            </svg>
+
+            {/* Spinning dial face */}
+            <div style={{
+              position: "absolute", inset: 14,
+              borderRadius: "50%",
+              background: "radial-gradient(circle at 38% 35%, #1e2235, #0a0d14)",
+              border: "2px solid #2a2010",
+              animation: introPhase === "dial" ? "vb-spin 0.9s linear infinite" :
+                         introPhase === "clunk" ? "vb-clunk 0.35s ease-out forwards" : "none",
+              boxShadow: "0 0 40px rgba(201,168,76,0.12), inset 0 0 20px rgba(0,0,0,0.8)",
+            }}>
+              {/* Dial grooves */}
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} style={{
+                  position: "absolute", top: "50%", left: "50%",
+                  width: "42%", height: "1.5px",
+                  background: "linear-gradient(90deg, transparent, #c9a84c44)",
+                  transformOrigin: "0 50%",
+                  transform: `rotate(${i * 45}deg)`,
+                }} />
+              ))}
+              {/* Center hub */}
+              <div style={{
+                position: "absolute", top: "50%", left: "50%",
+                width: 20, height: 20, borderRadius: "50%",
+                background: "radial-gradient(circle, #c9a84c, #8a6520)",
+                transform: "translate(-50%,-50%)",
+                boxShadow: "0 0 12px rgba(201,168,76,0.5)",
+              }} />
+              {/* Indicator dot */}
+              <div style={{
+                position: "absolute", top: 8, left: "50%",
+                width: 6, height: 6, borderRadius: "50%",
+                background: "#e8c97a",
+                transform: "translateX(-50%)",
+                boxShadow: "0 0 8px #c9a84c",
+              }} />
+            </div>
+
+            {/* Indicator needle (fixed, outside dial) */}
+            <div style={{
+              position: "absolute", top: -4, left: "50%",
+              width: 2, height: 14,
+              background: "#e8c97a",
+              transform: "translateX(-50%)",
+              boxShadow: "0 0 6px #c9a84c",
+            }} />
+          </div>
+
+          {/* Status text */}
+          <div style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.18em",
+            color: "#5a6070", marginTop: 48,
+            opacity: introPhase === "done" ? 0 : 1,
+            transition: "opacity 0.3s",
+          }}>
+            {introPhase === "dial" ? "AUTHENTICATING..." :
+             introPhase === "clunk" ? "ACCESS GRANTED" :
+             introPhase === "open" ? "OPENING VAULT..." : ""}
+          </div>
+
+          {/* Clunk flash effect */}
+          {introPhase === "clunk" && (
+            <div style={{
+              position: "absolute", inset: 0,
+              background: "rgba(201,168,76,0.04)",
+              animation: "vb-flash 0.3s ease-out forwards",
+              pointerEvents: "none",
+            }} />
+          )}
+
+          {/* Door sweep — a dark panel that slides away to reveal hero */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(135deg, #0d1018 0%, #070a10 100%)",
+            transformOrigin: "left center",
+            transform: introPhase === "open" || introPhase === "done"
+              ? "perspective(1200px) rotateY(-105deg)" : "perspective(1200px) rotateY(0deg)",
+            transition: introPhase === "open" || introPhase === "done"
+              ? "transform 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none",
+            borderRight: "3px solid #c9a84c44",
+            boxShadow: "inset -20px 0 60px rgba(201,168,76,0.06)",
+          }} />
+        </div>
+      )}
+
+      {/* Keyframe styles */}
+      <style>{`
+        @keyframes vb-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes vb-clunk {
+          0%   { transform: rotate(0deg); }
+          30%  { transform: rotate(18deg); }
+          55%  { transform: rotate(-6deg); }
+          75%  { transform: rotate(4deg); }
+          90%  { transform: rotate(-2deg); }
+          100% { transform: rotate(0deg); }
+        }
+        @keyframes vb-flash {
+          0%   { opacity: 1; }
+          100% { opacity: 0; }
+        }
+      `}</style>
 
       {/* ── NAVBAR ── */}
       <nav style={{ position: "sticky", top: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 56px", height: 68, background: "rgba(10,13,20,0.92)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(201,168,76,0.18)" }}>
