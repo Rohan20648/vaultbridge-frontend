@@ -241,12 +241,104 @@ function VaultCanvas() {
 
     // Interior shelves
     const shelfMat = new THREE.MeshPhysicalMaterial({ color: 0x141824, metalness: 0.8, roughness: 0.5 });
-    for (const sy of [-1.0, 0.8]) {
+    const shelfYs = [-1.0, 0.8];
+    for (const sy of shelfYs) {
       const shelf = new THREE.Mesh(new THREE.BoxGeometry(W - 1.0, 0.08, D - 0.6), shelfMat);
       shelf.position.set(0, sy, 0);
       shelf.castShadow = true;
       shelf.receiveShadow = true;
       bodyGroup.add(shelf);
+    }
+
+    // ── Interior contents ─────────────────────────────────────────────────────
+    const goldBarMat = new THREE.MeshPhysicalMaterial({ color: 0xd4a017, metalness: 1.0, roughness: 0.06, clearcoat: 0.6, clearcoatRoughness: 0.05 });
+    const goldBarDimMat = new THREE.MeshPhysicalMaterial({ color: 0xa07810, metalness: 0.98, roughness: 0.18 });
+    const paperMat = new THREE.MeshStandardMaterial({ color: 0x1a2035, metalness: 0.0, roughness: 0.95 });
+    const paperEdgeMat = new THREE.MeshStandardMaterial({ color: 0x253050, metalness: 0.0, roughness: 0.9 });
+    const bandMat = new THREE.MeshPhysicalMaterial({ color: 0xc9a84c, metalness: 0.3, roughness: 0.6 });
+
+    // Gold bars — stacked 2×2 on the bottom shelf (sy = -1.0, top face at -1.0 + 0.04 = -0.96)
+    const barW = 0.82, barH = 0.28, barD = 0.46;
+    const barPositions: [number, number, number][] = [
+      [-1.6, -0.96 + barH / 2, -0.5],
+      [-0.7, -0.96 + barH / 2, -0.5],
+      [ 0.2, -0.96 + barH / 2, -0.5],
+      [-1.6, -0.96 + barH / 2,  0.1],
+      [-0.7, -0.96 + barH / 2,  0.1],
+      // Second layer — slightly offset for a natural stacked look
+      [-1.6, -0.96 + barH * 1.5, -0.2],
+      [-0.7, -0.96 + barH * 1.5, -0.2],
+    ];
+    for (const [bx, by, bz] of barPositions) {
+      // Bar body — slightly tapered top using ScaleY on a box
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(barW, barH, barD), goldBarMat.clone());
+      bar.position.set(bx, by, bz);
+      bar.castShadow = true;
+      bodyGroup.add(bar);
+
+      // Stamped face highlight — darker gold inset on front face
+      const stamp = new THREE.Mesh(new THREE.BoxGeometry(barW * 0.6, barH * 0.5, 0.03), goldBarDimMat);
+      stamp.position.set(bx, by, bz + barD / 2 + 0.015);
+      bodyGroup.add(stamp);
+
+      // Chamfer edge lines (top/bottom) using thin gold strips
+      const chamfer = new THREE.Mesh(new THREE.BoxGeometry(barW + 0.02, 0.04, barD + 0.02), goldBarDimMat);
+      chamfer.position.set(bx, by + barH / 2, bz);
+      bodyGroup.add(chamfer);
+    }
+
+    // Document / cash stacks — on upper shelf (sy = 0.8, top face at 0.84)
+    const stackConfigs: [number, number, number, number][] = [
+      // [x, z, width, depth]
+      [-1.5, -0.3, 0.9, 0.6],
+      [-0.4, -0.3, 0.9, 0.6],
+      [ 0.7, -0.4, 0.75, 0.5],
+      [-1.5,  0.35, 0.9, 0.6],
+    ];
+    for (const [sx, sz, sw, sd] of stackConfigs) {
+      const stackH = 0.32 + Math.random() * 0.12;
+      const base = 0.84; // top of upper shelf
+
+      // Stack of papers/cash
+      const stack = new THREE.Mesh(new THREE.BoxGeometry(sw, stackH, sd), paperMat.clone());
+      stack.position.set(sx, base + stackH / 2, sz);
+      stack.castShadow = true;
+      bodyGroup.add(stack);
+
+      // Paper edge lines — slightly lighter sides
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(sw + 0.01, stackH - 0.02, sd + 0.01), paperEdgeMat);
+      edge.position.set(sx, base + stackH / 2, sz);
+      bodyGroup.add(edge);
+
+      // Gold band around the stack
+      const band = new THREE.Mesh(new THREE.BoxGeometry(sw + 0.03, 0.06, sd + 0.03), bandMat);
+      band.position.set(sx, base + stackH * 0.55, sz);
+      bodyGroup.add(band);
+    }
+
+    // Small cylindrical coin rolls on bottom shelf right side
+    const coinMat = new THREE.MeshPhysicalMaterial({ color: 0xe0ba5a, metalness: 1.0, roughness: 0.1 });
+    for (let ci = 0; ci < 4; ci++) {
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.55, 24), coinMat);
+      roll.rotation.z = Math.PI / 2;
+      roll.position.set(1.1 + ci * 0.0, -0.96 + 0.18, -0.4 + ci * 0.44);
+      roll.castShadow = true;
+      bodyGroup.add(roll);
+    }
+
+    // Wall-mounted back panel detail — a glowing circuit-like grid
+    const panelLineMat = new THREE.MeshStandardMaterial({ color: 0x1a2540, emissive: 0x203060, emissiveIntensity: 0.4, roughness: 1.0 });
+    // Horizontal lines on back wall
+    for (let li = 0; li < 5; li++) {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(W - 1.0, 0.025, 0.025), panelLineMat);
+      line.position.set(0, -1.8 + li * 0.9, -D / 2 + 0.22);
+      bodyGroup.add(line);
+    }
+    // Vertical lines
+    for (let li = 0; li < 4; li++) {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.025, H - 1.2, 0.025), panelLineMat);
+      line.position.set(-1.5 + li * 1.0, 0, -D / 2 + 0.22);
+      bodyGroup.add(line);
     }
 
     // Body outer gold trim lines — thick metallic frames
