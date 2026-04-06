@@ -1,18 +1,13 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { Search, X, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import PageTransition from "@/components/PageTransition";
+import HeroBackground from "@/components/HeroBackground";
 import StatusBadge from "@/components/StatusBadge";
 import { getIndustries, getShark, getSharks, getStartup, getStartups } from "@/lib/api";
 
 const statuses = ["All", "Active", "IPO", "Acquired", "Dormant", "Shutdown", "Pivoting"];
 
-type IndustryRecord = {
-  industry_name: string;
-};
-
+type IndustryRecord = { industry_name: string };
 type StartupRecord = {
   startup_id: number;
   startup_name?: string;
@@ -25,12 +20,7 @@ type StartupRecord = {
   location_display?: string;
   website?: string;
 };
-
-type InvestorExpertise = {
-  expertise_id: number;
-  domain: string;
-};
-
+type InvestorExpertise = { expertise_id: number; domain: string };
 type InvestorRecord = {
   shark_id: number;
   first_name?: string;
@@ -48,10 +38,28 @@ type InvestorRecord = {
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "object" && error && "response" in error) {
-    const response = (error as { response?: { data?: { message?: string } } }).response;
-    return response?.data?.message || fallback;
+    const r = (error as { response?: { data?: { message?: string } } }).response;
+    return r?.data?.message || fallback;
   }
   return fallback;
+};
+
+const fmtFunding = (v: number) =>
+  v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(0)}K` : `$${v}`;
+
+// Shared input style
+const inputStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(201,168,76,0.2)",
+  color: "#f0ece2",
+  borderRadius: 0,
+  padding: "10px 16px",
+  fontSize: 12,
+  fontFamily: "'DM Mono', monospace",
+  letterSpacing: "0.05em",
+  outline: "none",
+  width: "100%",
+  transition: "border-color 0.2s",
 };
 
 const ExplorePage = () => {
@@ -69,34 +77,30 @@ const ExplorePage = () => {
   const [modalLoading, setModalLoading] = useState(false);
 
   useEffect(() => {
-    const fetchAll = async () => {
+    (async () => {
       try {
         setLoading(true);
         const [startupRes, sharkRes, industryRes] = await Promise.all([
-          getStartups(),
-          getSharks(),
-          getIndustries(),
+          getStartups(), getSharks(), getIndustries(),
         ]);
         setStartups(startupRes.data || []);
         setInvestors(sharkRes.data || []);
-        const industryNames = ["All", ...(industryRes.data || []).map((i: IndustryRecord) => i.industry_name)];
-        setIndustries(industryNames);
-      } catch (fetchError: unknown) {
-        setError(getErrorMessage(fetchError, "Failed to load data. Please try again later."));
+        setIndustries(["All", ...(industryRes.data || []).map((i: IndustryRecord) => i.industry_name)]);
+      } catch (e: unknown) {
+        setError(getErrorMessage(e, "Failed to load data. Please try again later."));
       } finally {
         setLoading(false);
       }
-    };
-    fetchAll();
+    })();
   }, []);
 
   const filteredStartups = startups.filter(s => {
-    const matchSearch =
-      (s.startup_name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (s.tagline || "").toLowerCase().includes(search.toLowerCase());
-    const matchIndustry = industryFilter === "All" || s.industry_name === industryFilter;
-    const matchStatus = statusFilter === "All" || s.status === statusFilter;
-    return matchSearch && matchIndustry && matchStatus;
+    const q = search.toLowerCase();
+    return (
+      ((s.startup_name || "").toLowerCase().includes(q) || (s.tagline || "").toLowerCase().includes(q)) &&
+      (industryFilter === "All" || s.industry_name === industryFilter) &&
+      (statusFilter === "All" || s.status === statusFilter)
+    );
   });
 
   const filteredInvestors = investors.filter(inv =>
@@ -108,210 +112,474 @@ const ExplorePage = () => {
     try {
       setModalLoading(true);
       setSelectedStartup(startup);
-      const startupRes = await getStartup(startup.startup_id);
-      setSelectedStartup({ ...startup, ...(startupRes.data || {}) });
-    } catch {
-      setSelectedStartup(startup);
-    } finally {
-      setModalLoading(false);
-    }
+      const res = await getStartup(startup.startup_id);
+      setSelectedStartup({ ...startup, ...(res.data || {}) });
+    } catch { setSelectedStartup(startup); }
+    finally { setModalLoading(false); }
   };
 
   const handleInvestorSelect = async (investor: InvestorRecord) => {
     try {
       setModalLoading(true);
       setSelectedInvestor(investor);
-      const investorRes = await getShark(investor.shark_id);
-      setSelectedInvestor({ ...investor, ...(investorRes.data || {}) });
-    } catch {
-      setSelectedInvestor(investor);
-    } finally {
-      setModalLoading(false);
-    }
+      const res = await getShark(investor.shark_id);
+      setSelectedInvestor({ ...investor, ...(res.data || {}) });
+    } catch { setSelectedInvestor(investor); }
+    finally { setModalLoading(false); }
   };
 
   return (
     <>
       <Navbar />
-      <PageTransition>
-        <div className="min-h-screen pt-20 pb-16">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-10">
-              <h1 className="text-3xl md:text-4xl font-bold mb-3">Explore the Ecosystem</h1>
-              <p className="text-muted-foreground">Discover innovative startups and strategic investors</p>
-            </div>
+      <div
+        style={{
+          position: "relative",
+          minHeight: "100vh",
+          background: "#0a0d14",
+          color: "#f0ece2",
+          fontFamily: "'Cormorant Garamond', Georgia, serif",
+          overflow: "hidden",
+        }}
+      >
+        <HeroBackground opacity={0.45} />
 
-            {/* Tabs */}
-            <div className="flex justify-center gap-2 mb-8">
-              {(["startups", "investors"] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => { setTab(t); setSearch(""); }}
-                  className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${tab === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+        <div style={{ position: "relative", zIndex: 2, paddingTop: 100, paddingBottom: 80 }}>
+          {/* Page header */}
+          <div style={{ textAlign: "center", marginBottom: 56, padding: "0 40px" }}>
+            <div
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 10,
+                letterSpacing: "0.2em",
+                color: "#c9a84c",
+                marginBottom: 20,
+              }}
+            >
+              — THE ECOSYSTEM —
+            </div>
+            <h1
+              style={{
+                fontSize: "clamp(36px, 4.5vw, 60px)",
+                fontWeight: 300,
+                lineHeight: 1.05,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Explore the{" "}
+              <em style={{ color: "#e8c97a", fontStyle: "italic" }}>Vault</em>
+            </h1>
+          </div>
+
+          {/* Tab switcher */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 1,
+              marginBottom: 40,
+              background: "rgba(201,168,76,0.18)",
+              maxWidth: 360,
+              margin: "0 auto 40px",
+            }}
+          >
+            {(["startups", "investors"] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSearch(""); }}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: tab === t ? "rgba(201,168,76,0.15)" : "#0f1420",
+                  border: "none",
+                  color: tab === t ? "#e8c97a" : "#8892a4",
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  borderBottom: tab === t ? "1px solid #c9a84c" : "1px solid transparent",
+                }}
+              >
+                {t === "startups" ? "STARTUPS" : "INVESTORS"}
+              </button>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginBottom: 32,
+              padding: "0 56px",
+              maxWidth: 1280,
+              marginLeft: "auto",
+              marginRight: "auto",
+            }}
+          >
+            <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+              <Search
+                size={14}
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#8892a4",
+                }}
+              />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={`Search ${tab}…`}
+                style={{ ...inputStyle, paddingLeft: 40 }}
+                onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.55)")}
+                onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.2)")}
+              />
+            </div>
+            {tab === "startups" && (
+              <>
+                <select
+                  value={industryFilter}
+                  onChange={e => setIndustryFilter(e.target.value)}
+                  style={{ ...inputStyle, width: "auto", minWidth: 160 }}
                 >
-                  {t === "startups" ? "Startups" : "Investors"}
-                </button>
-              ))}
-            </div>
-
-            {/* Search & Filters */}
-            <div className="flex flex-wrap gap-3 mb-8">
-              <div className="relative flex-1 min-w-[250px]">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-muted border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder={`Search ${tab}...`}
-                />
-              </div>
-              {tab === "startups" && (
-                <>
-                  <select value={industryFilter} onChange={e => setIndustryFilter(e.target.value)} className="px-4 py-2.5 rounded-lg bg-muted border border-border text-foreground text-sm">
-                    {industries.map(i => <option key={i}>{i}</option>)}
-                  </select>
-                  <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-2.5 rounded-lg bg-muted border border-border text-foreground text-sm">
-                    {statuses.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="flex justify-center items-center py-20">
-                <Loader2 size={32} className="animate-spin text-primary" />
-              </div>
-            ) : error ? (
-              <div className="text-center py-20 text-destructive">{error}</div>
-            ) : tab === "startups" ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredStartups.length === 0 ? (
-                  <p className="col-span-4 text-center text-muted-foreground py-10">No startups found.</p>
-                ) : filteredStartups.map((s, i) => (
-                  <motion.div
-                    key={s.startup_id}
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => handleStartupSelect(s)}
-                    className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="font-semibold text-foreground">{s.startup_name}</h3>
-                      <StatusBadge status={s.status} />
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">{s.tagline || "—"}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{s.industry_name || "—"}</span>
-                      <span>{s.founded_year} · {s.total_funding_usd ? `$${(s.total_funding_usd / 1e6).toFixed(1)}M` : "N/A"}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredInvestors.length === 0 ? (
-                  <p className="col-span-3 text-center text-muted-foreground py-10">No investors found.</p>
-                ) : filteredInvestors.map((inv, i) => (
-                  <motion.div
-                    key={inv.shark_id}
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => handleInvestorSelect(inv)}
-                    className="glass-card glass-card-hover rounded-xl p-6 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                        <span className="text-primary font-bold">{inv.first_name?.charAt(0)}</span>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-foreground">{inv.first_name} {inv.last_name}</h3>
-                        <p className="text-sm text-muted-foreground">{inv.company_name || "Independent"}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="bg-accent/50 px-2 py-1 rounded">{inv.company_type || "Investor"}</span>
-                      <span>{inv.net_worth_usd_millions ? `$${inv.net_worth_usd_millions}M` : "—"}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
+                  {industries.map(i => <option key={i} style={{ background: "#0f1420" }}>{i}</option>)}
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  style={{ ...inputStyle, width: "auto", minWidth: 140 }}
+                >
+                  {statuses.map(s => <option key={s} style={{ background: "#0f1420" }}>{s}</option>)}
+                </select>
+              </>
             )}
           </div>
 
-          {/* Startup Modal */}
-          {selectedStartup && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={() => setSelectedStartup(null)}>
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card rounded-2xl p-8 max-w-lg w-full" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-xl font-bold text-foreground">{selectedStartup.startup_name}</h2>
-                    <p className="text-muted-foreground">{selectedStartup.tagline || "—"}</p>
+          {/* Content */}
+          <div style={{ padding: "0 56px", maxWidth: 1280, marginLeft: "auto", marginRight: "auto" }}>
+            {loading ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}>
+                <Loader2 size={28} style={{ color: "#c9a84c", animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: "center", padding: "80px 0", color: "#8892a4", fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
+                {error}
+              </div>
+            ) : tab === "startups" ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                  gap: 1,
+                  background: "rgba(201,168,76,0.18)",
+                }}
+              >
+                {filteredStartups.length === 0 ? (
+                  <div style={{ padding: "80px 0", textAlign: "center", color: "#8892a4", fontFamily: "'DM Mono', monospace", fontSize: 11, gridColumn: "1/-1", background: "#0a0d14" }}>
+                    No startups found.
                   </div>
-                  <button onClick={() => setSelectedStartup(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
-                </div>
-                {modalLoading && <div className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Fetching latest startup details...</div>}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-muted-foreground">Industry</span><p className="font-medium text-foreground">{selectedStartup.industry_name || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Status</span><p><StatusBadge status={selectedStartup.status} /></p></div>
-                  <div><span className="text-muted-foreground">Founded</span><p className="font-medium text-foreground">{selectedStartup.founded_year || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Total Funding</span><p className="font-medium text-foreground">{selectedStartup.total_funding_usd ? `$${Number(selectedStartup.total_funding_usd).toLocaleString()}` : "N/A"}</p></div>
-                  <div><span className="text-muted-foreground">Employees</span><p className="font-medium text-foreground">{selectedStartup.num_employees ?? "—"}</p></div>
-                  <div><span className="text-muted-foreground">Location</span><p className="font-medium text-foreground">{selectedStartup.location_display || "—"}</p></div>
-                  {selectedStartup.website && (
-                    <div className="col-span-2"><span className="text-muted-foreground">Website</span><p><a href={selectedStartup.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm">{selectedStartup.website}</a></p></div>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          )}
-
-          {/* Investor Modal */}
-          {selectedInvestor && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={() => setSelectedInvestor(null)}>
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card rounded-2xl p-8 max-w-lg w-full" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-primary/15 flex items-center justify-center">
-                      <span className="text-primary font-bold text-xl">{selectedInvestor.first_name?.charAt(0)}</span>
+                ) : filteredStartups.map(s => (
+                  <div
+                    key={s.startup_id}
+                    onClick={() => handleStartupSelect(s)}
+                    style={{
+                      background: "#0f1420",
+                      padding: 32,
+                      cursor: "pointer",
+                      transition: "background 0.25s",
+                    }}
+                    onMouseOver={e => (e.currentTarget.style.background = "#161c2d")}
+                    onMouseOut={e => (e.currentTarget.style.background = "#0f1420")}
+                  >
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c", marginBottom: 16 }}>
+                      {s.industry_name || "TECHNOLOGY"}
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-foreground">{selectedInvestor.first_name} {selectedInvestor.last_name}</h2>
-                      <p className="text-muted-foreground">{selectedInvestor.company_name || "Independent"}</p>
+                    <div style={{ fontSize: 20, fontWeight: 400, marginBottom: 8, letterSpacing: "-0.01em" }}>
+                      {s.startup_name}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 300, color: "#8892a4", lineHeight: 1.7, marginBottom: 24 }}>
+                      {s.tagline || "—"}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 16 }}>
+                      <StatusBadge status={s.status} />
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#e8c97a" }}>
+                        {s.total_funding_usd ? fmtFunding(s.total_funding_usd) : "N/A"}
+                      </span>
                     </div>
                   </div>
-                  <button onClick={() => setSelectedInvestor(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
-                </div>
-                {modalLoading && <div className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Fetching latest investor details...</div>}
-                {selectedInvestor.bio && <p className="text-sm text-muted-foreground mb-4">{selectedInvestor.bio}</p>}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-muted-foreground">Type</span><p className="font-medium text-foreground">{selectedInvestor.company_type || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Net Worth</span><p className="font-medium text-foreground">{selectedInvestor.net_worth_usd_millions ? `$${selectedInvestor.net_worth_usd_millions}M` : "—"}</p></div>
-                  <div><span className="text-muted-foreground">Nationality</span><p className="font-medium text-foreground">{selectedInvestor.nationality || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Email</span><p className="font-medium text-foreground">{selectedInvestor.email || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Phone</span><p className="font-medium text-foreground">{selectedInvestor.phone || "—"}</p></div>
-                  <div><span className="text-muted-foreground">Company ID</span><p className="font-medium text-foreground">{selectedInvestor.company_id ?? "—"}</p></div>
-                </div>
-                {selectedInvestor.expertise?.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs text-muted-foreground mb-2">Expertise</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedInvestor.expertise.map((item: InvestorExpertise) => (
-                        <span key={item.expertise_id} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
-                          {item.domain}
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                  gap: 1,
+                  background: "rgba(201,168,76,0.18)",
+                }}
+              >
+                {filteredInvestors.length === 0 ? (
+                  <div style={{ padding: "80px 0", textAlign: "center", color: "#8892a4", fontFamily: "'DM Mono', monospace", fontSize: 11, gridColumn: "1/-1", background: "#0a0d14" }}>
+                    No investors found.
+                  </div>
+                ) : filteredInvestors.map(inv => (
+                  <div
+                    key={inv.shark_id}
+                    onClick={() => handleInvestorSelect(inv)}
+                    style={{
+                      background: "#0f1420",
+                      padding: 32,
+                      cursor: "pointer",
+                      transition: "background 0.25s",
+                    }}
+                    onMouseOver={e => (e.currentTarget.style.background = "#161c2d")}
+                    onMouseOut={e => (e.currentTarget.style.background = "#0f1420")}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          border: "1px solid rgba(201,168,76,0.3)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          color: "#e8c97a",
+                          fontFamily: "'Cormorant Garamond', Georgia, serif",
+                          fontSize: 20,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {inv.first_name?.charAt(0)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 400, letterSpacing: "-0.01em" }}>
+                          {inv.first_name} {inv.last_name}
+                        </div>
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#8892a4", marginTop: 4 }}>
+                          {inv.company_name || "Independent"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 16 }}>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#c9a84c", letterSpacing: "0.1em" }}>
+                        {inv.company_type || "INVESTOR"}
+                      </span>
+                      {inv.net_worth_usd_millions && (
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#e8c97a", marginLeft: "auto" }}>
+                          ${inv.net_worth_usd_millions}M
                         </span>
-                      ))}
+                      )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Startup Modal ── */}
+        {selectedStartup && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(10,13,20,0.88)",
+              backdropFilter: "blur(12px)",
+              padding: 24,
+            }}
+            onClick={() => setSelectedStartup(null)}
+          >
+            <div
+              style={{
+                background: "#0f1420",
+                border: "1px solid rgba(201,168,76,0.22)",
+                maxWidth: 560,
+                width: "100%",
+                padding: 48,
+                position: "relative",
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedStartup(null)}
+                style={{ position: "absolute", top: 24, right: 24, background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.14em", color: "#c9a84c", marginBottom: 12 }}>
+                {selectedStartup.industry_name?.toUpperCase() || "STARTUP"}
+              </div>
+              <h2 style={{ fontSize: 28, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 6 }}>
+                {selectedStartup.startup_name}
+              </h2>
+              <p style={{ fontSize: 15, color: "#8892a4", fontWeight: 300, lineHeight: 1.7, marginBottom: 32 }}>
+                {selectedStartup.tagline || "—"}
+              </p>
+
+              {modalLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24, fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#8892a4" }}>
+                  <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Loading details…
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 32px", borderTop: "1px solid rgba(201,168,76,0.12)", paddingTop: 28 }}>
+                {[
+                  ["Status", <StatusBadge status={selectedStartup.status} />],
+                  ["Founded", selectedStartup.founded_year || "—"],
+                  ["Total Funding", selectedStartup.total_funding_usd ? fmtFunding(selectedStartup.total_funding_usd) : "N/A"],
+                  ["Employees", selectedStartup.num_employees ?? "—"],
+                  ["Location", selectedStartup.location_display || "—"],
+                ].map(([label, val]) => (
+                  <div key={String(label)}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#8892a4", marginBottom: 6 }}>
+                      {String(label).toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 400 }}>{val as React.ReactNode}</div>
+                  </div>
+                ))}
+                {selectedStartup.website && (
+                  <div style={{ gridColumn: "1/-1" }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#8892a4", marginBottom: 6 }}>WEBSITE</div>
+                    <a href={selectedStartup.website} target="_blank" rel="noopener noreferrer" style={{ color: "#e8c97a", fontSize: 14, textDecoration: "none" }}>
+                      {selectedStartup.website}
+                    </a>
                   </div>
                 )}
-              </motion.div>
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <Footer />
-        </div>
-      </PageTransition>
+        {/* ── Investor Modal ── */}
+        {selectedInvestor && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(10,13,20,0.88)",
+              backdropFilter: "blur(12px)",
+              padding: 24,
+            }}
+            onClick={() => setSelectedInvestor(null)}
+          >
+            <div
+              style={{
+                background: "#0f1420",
+                border: "1px solid rgba(201,168,76,0.22)",
+                maxWidth: 560,
+                width: "100%",
+                padding: 48,
+                position: "relative",
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedInvestor(null)}
+                style={{ position: "absolute", top: 24, right: 24, background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28 }}>
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    border: "1px solid rgba(201,168,76,0.35)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#e8c97a",
+                    fontSize: 22,
+                    fontFamily: "'Cormorant Garamond', Georgia, serif",
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
+                >
+                  {selectedInvestor.first_name?.charAt(0)}
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em" }}>
+                    {selectedInvestor.first_name} {selectedInvestor.last_name}
+                  </h2>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#8892a4", marginTop: 4 }}>
+                    {selectedInvestor.company_name || "Independent"}
+                  </div>
+                </div>
+              </div>
+
+              {selectedInvestor.bio && (
+                <p style={{ fontSize: 14, color: "#8892a4", fontWeight: 300, lineHeight: 1.75, marginBottom: 28 }}>
+                  {selectedInvestor.bio}
+                </p>
+              )}
+
+              {modalLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24, fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#8892a4" }}>
+                  <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Loading details…
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 32px", borderTop: "1px solid rgba(201,168,76,0.12)", paddingTop: 28 }}>
+                {[
+                  ["Type", selectedInvestor.company_type || "—"],
+                  ["Net Worth", selectedInvestor.net_worth_usd_millions ? `$${selectedInvestor.net_worth_usd_millions}M` : "—"],
+                  ["Nationality", selectedInvestor.nationality || "—"],
+                  ["Email", selectedInvestor.email || "—"],
+                ].map(([label, val]) => (
+                  <div key={String(label)}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#8892a4", marginBottom: 6 }}>
+                      {String(label).toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 400 }}>{val as React.ReactNode}</div>
+                  </div>
+                ))}
+              </div>
+
+              {(selectedInvestor.expertise?.length ?? 0) > 0 && (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#8892a4", marginBottom: 12 }}>
+                    EXPERTISE
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {selectedInvestor.expertise!.map(item => (
+                      <span
+                        key={item.expertise_id}
+                        style={{
+                          border: "1px solid rgba(201,168,76,0.25)",
+                          padding: "5px 14px",
+                          fontFamily: "'DM Mono', monospace",
+                          fontSize: 9,
+                          letterSpacing: "0.1em",
+                          color: "#c9a84c",
+                        }}
+                      >
+                        {item.domain}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </>
   );
 };
