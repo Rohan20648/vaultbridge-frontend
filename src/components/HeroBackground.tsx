@@ -9,7 +9,7 @@ import * as THREE from "three";
  * Usage:
  *   <div style={{ position: "relative" }}>
  *     <HeroBackground opacity={0.55} />
- *     {/* your page content */}
+ *     your page content here
  *   </div>
  *
  * The canvas is absolutely positioned and pointer-events-none so it never
