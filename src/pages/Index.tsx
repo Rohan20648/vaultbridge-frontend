@@ -234,10 +234,27 @@ function VaultCanvas() {
     botWall.castShadow = true; botWall.receiveShadow = true;
     bodyGroup.add(botWall);
 
-    // Interior floor/ceiling/back — dark cavity
-    const cavity = new THREE.Mesh(new THREE.BoxGeometry(W - 0.82, H - 0.82, D - 0.4), interiorMat);
-    cavity.position.set(0, 0, 0);
-    bodyGroup.add(cavity);
+    // Interior walls — individual panels so the inside is hollow & visible
+    // Back inner wall
+    const innerBack = new THREE.Mesh(new THREE.BoxGeometry(W - 0.82, H - 0.82, 0.06), interiorMat);
+    innerBack.position.set(0, 0, -D / 2 + 0.22);
+    bodyGroup.add(innerBack);
+    // Left inner wall
+    const innerLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, H - 0.82, D - 0.42), interiorMat);
+    innerLeft.position.set(-(W - 0.82) / 2, 0, 0);
+    bodyGroup.add(innerLeft);
+    // Right inner wall
+    const innerRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, H - 0.82, D - 0.42), interiorMat);
+    innerRight.position.set((W - 0.82) / 2, 0, 0);
+    bodyGroup.add(innerRight);
+    // Inner floor
+    const innerFloor = new THREE.Mesh(new THREE.BoxGeometry(W - 0.82, 0.06, D - 0.42), interiorMat);
+    innerFloor.position.set(0, -(H - 0.82) / 2, 0);
+    bodyGroup.add(innerFloor);
+    // Inner ceiling
+    const innerCeil = new THREE.Mesh(new THREE.BoxGeometry(W - 0.82, 0.06, D - 0.42), interiorMat);
+    innerCeil.position.set(0, (H - 0.82) / 2, 0);
+    bodyGroup.add(innerCeil);
 
     // Interior shelves
     const shelfMat = new THREE.MeshPhysicalMaterial({ color: 0x141824, metalness: 0.8, roughness: 0.5 });
@@ -586,10 +603,14 @@ function VaultCanvas() {
     shadowPlane.receiveShadow = true;
     scene.add(shadowPlane);
 
-    // Interior warm glow light — sits just inside vault cavity, illuminates when door opens
-    const vaultInteriorLight = new THREE.PointLight(0xffd060, 0.0, 12);
-    vaultInteriorLight.position.set(-W / 2 + 2.0, 0, D / 2 - 1.5);
+    // Interior lights — multiple points so all contents are lit
+    const vaultInteriorLight = new THREE.PointLight(0xffd060, 0.0, 18);
+    vaultInteriorLight.position.set(0, 1.0, 1.2);
     scene.add(vaultInteriorLight);
+    // Second light aimed at bottom shelf (gold bars)
+    const vaultInteriorLight2 = new THREE.PointLight(0xffb030, 0.0, 14);
+    vaultInteriorLight2.position.set(0, -1.2, 1.5);
+    scene.add(vaultInteriorLight2);
 
     // Glowing inner wall panel behind door (emissive warm amber — reveals when open)
     const innerGlowMat = new THREE.MeshStandardMaterial({ color: 0x3a2800, emissive: 0xffa030, emissiveIntensity: 0.0, roughness: 1.0 });
@@ -648,7 +669,8 @@ function VaultCanvas() {
       openProgress = Math.min(1, Math.abs(curDoorOpen) / 1.45);
 
       // Animate interior glow as door opens
-      vaultInteriorLight.intensity = openProgress * 5.5;
+      vaultInteriorLight.intensity = openProgress * 8.0;
+      vaultInteriorLight2.intensity = openProgress * 6.0;
       innerGlowMat.emissiveIntensity = openProgress * 0.55;
       // Fade fill light as interior light takes over
       if (hovering) fill.intensity = 4.0 + openProgress * 3.5;
@@ -683,6 +705,7 @@ function VaultCanvas() {
       scene.environment?.dispose();
       pmremGenerator.dispose();
       innerGlowMat.dispose();
+      vaultInteriorLight2.dispose();
       renderer.dispose();
     };
   }, []);
