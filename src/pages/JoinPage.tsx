@@ -1,54 +1,180 @@
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { Rocket, Briefcase, Eye } from "lucide-react";
 import Navbar from "@/components/Navbar";
-import PageTransition from "@/components/PageTransition";
+import HeroBackground from "@/components/HeroBackground";
 
 const tiles = [
-  { icon: Rocket, label: "Startup Founder", desc: "Submit your venture and connect with investors", to: "/onboarding/founder", emoji: "🚀" },
-  { icon: Briefcase, label: "Investor (Shark)", desc: "Discover promising startups and close deals", to: "/onboarding/investor", emoji: "💼" },
-  { icon: Eye, label: "Browse as Viewer", desc: "Explore the startup and investor directory", to: "/explore", emoji: "👁️" },
+  {
+    icon: Rocket,
+    label: "Startup Founder",
+    desc: "Submit your venture and connect with investors who believe in your vision.",
+    to: "/onboarding/founder",
+    tag: "01",
+  },
+  {
+    icon: Briefcase,
+    label: "Investor",
+    desc: "Discover promising startups and close deals that define the next decade.",
+    to: "/onboarding/investor",
+    tag: "02",
+  },
+  {
+    icon: Eye,
+    label: "Browse as Viewer",
+    desc: "Explore the startup and investor directory without committing.",
+    to: "/explore",
+    tag: "03",
+  },
 ];
 
 const JoinPage = () => (
   <>
     <Navbar />
-    <PageTransition>
-      <div className="min-h-screen pt-16 flex items-center justify-center">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
-            className="text-center mb-12"
-          >
-            <div className="text-5xl mb-4">🏦</div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-3">How do you want to join VaultBridge?</h1>
-            <p className="text-muted-foreground">Select your role to get started</p>
-          </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-5">
-            {tiles.map((t, i) => (
-              <motion.div
-                key={t.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, duration: 0.4 }}
-              >
-                <Link
-                  to={t.to}
-                  className="glass-card glass-card-hover rounded-2xl p-8 text-center block h-full hover:scale-[1.02] transition-transform"
-                >
-                  <div className="text-4xl mb-4">{t.emoji}</div>
-                  <h3 className="font-semibold text-lg mb-2 text-foreground">{t.label}</h3>
-                  <p className="text-sm text-muted-foreground">{t.desc}</p>
-                </Link>
-              </motion.div>
-            ))}
+    <div
+      style={{
+        position: "relative",
+        minHeight: "100vh",
+        background: "#0a0d14",
+        color: "#f0ece2",
+        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+      }}
+    >
+      <HeroBackground opacity={0.55} />
+
+      <div
+        style={{
+          position: "relative",
+          zIndex: 2,
+          width: "100%",
+          maxWidth: 980,
+          padding: "120px 40px 80px",
+        }}
+      >
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 72 }}>
+          <div
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 10,
+              letterSpacing: "0.2em",
+              color: "#c9a84c",
+              marginBottom: 20,
+            }}
+          >
+            — SELECT YOUR ROLE —
           </div>
+          <h1
+            style={{
+              fontSize: "clamp(40px, 5vw, 64px)",
+              fontWeight: 300,
+              lineHeight: 1.05,
+              letterSpacing: "-0.01em",
+              marginBottom: 16,
+            }}
+          >
+            How do you want to<br />
+            <em style={{ color: "#e8c97a", fontStyle: "italic" }}>join the Vault?</em>
+          </h1>
+          <div style={{ width: 48, height: 1, background: "#c9a84c", margin: "0 auto" }} />
+        </div>
+
+        {/* Tiles */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 1,
+            background: "rgba(201,168,76,0.18)",
+          }}
+        >
+          {tiles.map(({ icon: Icon, label, desc, to, tag }) => (
+            <Link
+              key={label}
+              to={to}
+              style={{
+                background: "#0f1420",
+                padding: "48px 40px",
+                textDecoration: "none",
+                color: "inherit",
+                display: "block",
+                transition: "background 0.3s",
+                cursor: "pointer",
+              }}
+              onMouseOver={e => (e.currentTarget.style.background = "#161c2d")}
+              onMouseOut={e => (e.currentTarget.style.background = "#0f1420")}
+            >
+              <div
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: "0.15em",
+                  color: "#c9a84c",
+                  marginBottom: 28,
+                }}
+              >
+                {tag}
+              </div>
+
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  border: "1px solid rgba(201,168,76,0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 28,
+                  color: "#c9a84c",
+                }}
+              >
+                <Icon size={20} />
+              </div>
+
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 400,
+                  letterSpacing: "-0.01em",
+                  marginBottom: 12,
+                  color: "#f0ece2",
+                }}
+              >
+                {label}
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 300,
+                  color: "#8892a4",
+                  lineHeight: 1.75,
+                  marginBottom: 36,
+                }}
+              >
+                {desc}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  color: "#c9a84c",
+                  borderTop: "1px solid rgba(201,168,76,0.18)",
+                  paddingTop: 20,
+                }}
+              >
+                ENTER →
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
-    </PageTransition>
+    </div>
   </>
 );
 
