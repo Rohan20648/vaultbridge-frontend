@@ -297,8 +297,8 @@ function VaultCanvas() {
     //  VAULT DOOR — thick slab hinged on left
     // ═══════════════════════════════════════════════════════════════════════
     const doorGroup = new THREE.Group();
-    // Hinge pivot at left edge of door, at z = D/2 (front face of body)
-    doorGroup.position.set(-W / 2 + 0.2, 0, D / 2);
+    // Hinge pivot precisely at the left wall inner edge, flush with front face
+    doorGroup.position.set(-W / 2 + 0.22, 0, D / 2 + 0.01);
     vaultGroup.add(doorGroup);
 
     const doorThickness = 0.75;
@@ -503,24 +503,39 @@ function VaultCanvas() {
     shadowPlane.receiveShadow = true;
     scene.add(shadowPlane);
 
+    // Interior warm glow light — sits just inside vault cavity, illuminates when door opens
+    const vaultInteriorLight = new THREE.PointLight(0xffd060, 0.0, 12);
+    vaultInteriorLight.position.set(-W / 2 + 2.0, 0, D / 2 - 1.5);
+    scene.add(vaultInteriorLight);
+
+    // Glowing inner wall panel behind door (emissive warm amber — reveals when open)
+    const innerGlowMat = new THREE.MeshStandardMaterial({ color: 0x3a2800, emissive: 0xffa030, emissiveIntensity: 0.0, roughness: 1.0 });
+    const innerGlowPanel = new THREE.Mesh(new THREE.BoxGeometry(W - 0.84, H - 0.84, 0.04), innerGlowMat);
+    innerGlowPanel.position.set(0, 0, -D / 2 + 0.22);
+    bodyGroup.add(innerGlowPanel);
+
     // ── Mouse interaction ────────────────────────────────────────────────────
     let targetRotX = 0.15, targetRotY = 0.35;
     let curRotX = 0.15, curRotY = 0.35;
-    let targetDoorOpen = 0; // Door angle
+    let targetDoorOpen = 0; // Door angle in radians
     let curDoorOpen = 0;
     let hovering = false;
+    // Track open progress 0→1 for glow effects
+    let openProgress = 0;
 
     const onMove = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
-      targetRotY = ((e.clientX - r.left) / r.width - 0.5) * 0.6 + 0.3;
-      targetRotX = -((e.clientY - r.top)  / r.height - 0.5) * 0.4 + 0.15;
-      targetDoorOpen = 0.8; // Open the door when hovered
-      fill.intensity = 6.0; // Brighten interior
+      // Tighter rotation range on hover so vault tilts elegantly
+      targetRotY = ((e.clientX - r.left) / r.width - 0.5) * 0.45 + 0.28;
+      targetRotX = -((e.clientY - r.top)  / r.height - 0.5) * 0.30 + 0.12;
+      // Full cinematic door swing — ~83 degrees open, negative Y rotates door outward (leftward hinge)
+      targetDoorOpen = -1.45;
+      fill.intensity = 7.5;
       hovering = true;
     };
     const onLeave = () => { 
-        hovering = false; 
-        targetDoorOpen = 0; // Close when not hovered
+      hovering = false; 
+      targetDoorOpen = 0; // Close when not hovered
     };
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
@@ -542,9 +557,18 @@ function VaultCanvas() {
       vaultGroup.rotation.x = curRotX;
       vaultGroup.rotation.y = curRotY;
       
-      // Smooth door open
-      curDoorOpen += (targetDoorOpen - curDoorOpen) * 0.04;
+      // Smooth door open — slower, more cinematic easing (0.028 instead of 0.04)
+      curDoorOpen += (targetDoorOpen - curDoorOpen) * 0.028;
       doorGroup.rotation.y = curDoorOpen;
+
+      // Open progress 0→1 based on how open the door is
+      openProgress = Math.min(1, Math.abs(curDoorOpen) / 1.45);
+
+      // Animate interior glow as door opens
+      vaultInteriorLight.intensity = openProgress * 5.5;
+      innerGlowMat.emissiveIntensity = openProgress * 0.55;
+      // Fade fill light as interior light takes over
+      if (hovering) fill.intensity = 4.0 + openProgress * 3.5;
 
       // Needle spin
       needle.rotation.z = t * 1.2;
@@ -575,6 +599,7 @@ function VaultCanvas() {
       canvas.removeEventListener("mouseleave", onLeave);
       scene.environment?.dispose();
       pmremGenerator.dispose();
+      innerGlowMat.dispose();
       renderer.dispose();
     };
   }, []);
