@@ -50,7 +50,7 @@ const InvestorOnboarding = () => {
     defaultValues: {
       firstName: "", lastName: "", email: "", phone: "", dob: "",
       nationality: "", netWorth: "", bio: "",
-      company: { name: "", type: "", website: "", aum: "", foundedYear: "", city: "", state: "", country: "" },
+      company: { name: "", type: "", website: "", aum: "", city: "", country: "" },
       expertise: [{ domain: "", years: "", isPrimary: false }],
       portfolio: [{ startup_id: "", totalInvested: "", equity: "", status: "Active", firstDate: "", valuation: "", roi: "" }],
       deal: { startup_id: "", amount: "", equity: "", type: "Equity", date: "", status: "Pending", notes: "", contribution: "", equityShare: "", isLead: false },
@@ -68,21 +68,45 @@ const InvestorOnboarding = () => {
   const prev = () => setStep(s => Math.max(s - 1, 0));
 
   const onSubmit = async () => {
-    if (!allData.firstName?.trim()) { toast({ title: "Error", description: "First name is required.", variant: "destructive" }); setStep(0); return; }
-    if (!allData.netWorth?.trim())  { toast({ title: "Error", description: "Net worth is required.", variant: "destructive" }); setStep(0); return; }
+    if (!allData.firstName?.trim()) {
+      toast({ title: "Error", description: "First name is required.", variant: "destructive" });
+      setStep(0);
+      return;
+    }
+    if (!allData.netWorth?.trim()) {
+      toast({ title: "Error", description: "Net worth is required.", variant: "destructive" });
+      setStep(0);
+      return;
+    }
 
     try {
       setSubmitting(true);
 
-      // ✅ FIX: send expertise as array of objects, not flat expertise_domain string
+      // Build expertise array — include years_experience for the backend
       const expertisePayload = allData.expertise
         .filter(e => e.domain?.trim())
         .map((e, i) => ({
           domain: e.domain.trim(),
+          years_experience: e.years ? parseInt(e.years) : null,
           is_primary: i === 0 ? 1 : 0,
         }));
 
-      const sharkRes = await createShark({
+      // FIX: Build company object with ALL fields (website, aum, city, country).
+      // Previously only company_name and company_type were sent, causing the
+      // backend INSERT into investor_company to fail with 500 when those
+      // columns have NOT NULL constraints.
+      const companyPayload = allData.company.name?.trim()
+        ? {
+            company_name: allData.company.name.trim(),
+            company_type: nullify(allData.company.type),
+            website: nullify(allData.company.website),
+            aum: allData.company.aum ? allData.company.aum.trim() : null,
+            city: nullify(allData.company.city),
+            country: nullify(allData.company.country),
+          }
+        : null;
+
+      const sharkPayload: any = {
         first_name: allData.firstName.trim(),
         last_name: nullify(allData.lastName),
         email: nullify(allData.email),
@@ -92,16 +116,25 @@ const InvestorOnboarding = () => {
         net_worth_usd_millions: allData.netWorth ? parseFloat(allData.netWorth) : null,
         bio: nullify(allData.bio),
         expertise: expertisePayload,
-      });
+      };
+
+      // Only include company key if there is a company name
+      if (companyPayload) {
+        sharkPayload.company = companyPayload;
+      }
+
+      const sharkRes = await createShark(sharkPayload);
 
       const shark_id = sharkRes.data?.shark_id;
       if (!shark_id) throw new Error("Investor creation failed.");
       localStorage.setItem("vaultbridge_investor_shark_id", String(shark_id));
 
+      // Portfolio entries
       for (const p of allData.portfolio) {
         if (p.startup_id && shark_id) {
           await createPortfolio({
-            shark_id, startup_id: parseInt(p.startup_id),
+            shark_id,
+            startup_id: parseInt(p.startup_id),
             total_invested_usd: p.totalInvested ? parseFloat(p.totalInvested) : null,
             current_equity_percent: p.equity ? parseFloat(p.equity) : null,
             portfolio_status: p.status || "Active",
@@ -112,6 +145,7 @@ const InvestorOnboarding = () => {
         }
       }
 
+      // Deal entry — now sends deal_notes and the sharks junction data
       if (allData.deal.startup_id) {
         await createDeal({
           startup_id: parseInt(allData.deal.startup_id),
@@ -123,8 +157,8 @@ const InvestorOnboarding = () => {
           deal_notes: nullify(allData.deal.notes),
           sharks: [{
             shark_id,
-            contribution: allData.deal.contribution ? parseFloat(allData.deal.contribution) : 0,
-            equity: allData.deal.equityShare ? parseFloat(allData.deal.equityShare) : 0,
+            contribution: allData.deal.contribution ? parseFloat(allData.deal.contribution) : null,
+            equity: allData.deal.equityShare ? parseFloat(allData.deal.equityShare) : null,
             is_lead: allData.deal.isLead ? 1 : 0,
           }],
         });
@@ -133,7 +167,11 @@ const InvestorOnboarding = () => {
       toast({ title: "Profile Created!", description: "Your investor profile has been submitted." });
       navigate("/dashboard/investor");
     } catch (e: any) {
-      toast({ title: "Error", description: e?.response?.data?.error || e?.message || "Failed to create profile.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || e?.response?.data?.error || e?.message || "Failed to create profile.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -284,36 +322,36 @@ const InvestorOnboarding = () => {
               <div>
                 <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Your Expertise</h2>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {expertiseFields.fields.map((field, idx) => (
-                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c" }}>EXPERTISE {idx + 1}</span>
-                        {idx > 0 && (
-                          <button type="button" onClick={() => expertiseFields.remove(idx)}
-                            style={{ background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}>
-                            <Trash2 size={14} />
+                  {expertiseFields.fields.map((field, i) => (
+                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24 }}>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c", marginBottom: 16 }}>
+                        EXPERTISE {i + 1}
+                        {i > 0 && (
+                          <button type="button" onClick={() => expertiseFields.remove(i)}
+                            style={{ marginLeft: 12, background: "none", border: "none", color: "#e05c5c", cursor: "pointer" }}>
+                            <Trash2 size={10} />
                           </button>
                         )}
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: "0 20px", alignItems: "end" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 16, alignItems: "end" }}>
                         <div>
                           <label style={labelStyle}>DOMAIN</label>
-                          <input {...register(`expertise.${idx}.domain`)} style={inputStyle} placeholder="Machine Learning"
+                          <input {...register(`expertise.${i}.domain`)} style={inputStyle} placeholder="Machine Learning"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
                           <label style={labelStyle}>YEARS EXP</label>
-                          <input {...register(`expertise.${idx}.years`)} style={inputStyle} placeholder="12"
+                          <input {...register(`expertise.${i}.years`)} style={inputStyle} placeholder="12" type="number" min="0"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 2 }}>
-                          <input type="checkbox" {...register(`expertise.${idx}.isPrimary`)}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                          <input type="checkbox" {...register(`expertise.${i}.isPrimary`)}
                             style={{ width: 14, height: 14, accentColor: "#c9a84c", cursor: "pointer" }} />
-                          <label style={{ ...labelStyle, marginBottom: 0, fontSize: 9 }}>PRIMARY</label>
+                          <label style={{ ...labelStyle, marginBottom: 0, cursor: "pointer" }}>PRIMARY</label>
                         </div>
                       </div>
                     </div>
@@ -332,64 +370,64 @@ const InvestorOnboarding = () => {
             {/* Step 3: Portfolio */}
             {step === 3 && (
               <div>
-                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Portfolio Investments</h2>
+                <h2 style={{ fontSize: 24, fontWeight: 400, letterSpacing: "-0.01em", marginBottom: 32 }}>Your Portfolio <span style={{ fontSize: 14, color: "#8892a4", fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }}>(Optional)</span></h2>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {portfolioFields.fields.map((field, idx) => (
-                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24, background: "rgba(255,255,255,0.02)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c" }}>INVESTMENT {idx + 1}</span>
-                        {idx > 0 && (
-                          <button type="button" onClick={() => portfolioFields.remove(idx)}
-                            style={{ background: "none", border: "none", color: "#8892a4", cursor: "pointer" }}>
-                            <Trash2 size={14} />
+                  {portfolioFields.fields.map((field, i) => (
+                    <div key={field.id} style={{ border: "1px solid rgba(201,168,76,0.12)", padding: 24 }}>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.12em", color: "#c9a84c", marginBottom: 16 }}>
+                        INVESTMENT {i + 1}
+                        {i > 0 && (
+                          <button type="button" onClick={() => portfolioFields.remove(i)}
+                            style={{ marginLeft: 12, background: "none", border: "none", color: "#e05c5c", cursor: "pointer" }}>
+                            <Trash2 size={10} />
                           </button>
                         )}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
                         <div>
                           <label style={labelStyle}>STARTUP</label>
-                          <select {...register(`portfolio.${idx}.startup_id`)} style={{ ...inputStyle, cursor: "pointer" }}>
+                          <select {...register(`portfolio.${i}.startup_id`)} style={{ ...inputStyle, cursor: "pointer" }}>
                             <option value="" style={{ background: "#0f1420" }}>Select Startup</option>
                             {startups.map((s: any) => <option key={s.startup_id} value={s.startup_id} style={{ background: "#0f1420" }}>{s.startup_name}</option>)}
                           </select>
                         </div>
                         <div>
                           <label style={labelStyle}>TOTAL INVESTED (USD)</label>
-                          <input {...register(`portfolio.${idx}.totalInvested`)} style={inputStyle} placeholder="2000000"
+                          <input {...register(`portfolio.${i}.totalInvested`)} style={inputStyle} placeholder="500000"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
-                          <label style={labelStyle}>CURRENT EQUITY %</label>
-                          <input {...register(`portfolio.${idx}.equity`)} style={inputStyle} placeholder="15"
+                          <label style={labelStyle}>EQUITY %</label>
+                          <input {...register(`portfolio.${i}.equity`)} style={inputStyle} placeholder="15"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
                           <label style={labelStyle}>STATUS</label>
-                          <select {...register(`portfolio.${idx}.status`)} style={{ ...inputStyle, cursor: "pointer" }}>
-                            {["Active","Exited","Written Off"].map(s => <option key={s} style={{ background: "#0f1420" }}>{s}</option>)}
+                          <select {...register(`portfolio.${i}.status`)} style={{ ...inputStyle, cursor: "pointer" }}>
+                            {["Active","Exited","Written Off"].map(o => <option key={o} style={{ background: "#0f1420" }}>{o}</option>)}
                           </select>
                         </div>
                         <div>
                           <label style={labelStyle}>FIRST INVESTMENT DATE</label>
-                          <input {...register(`portfolio.${idx}.firstDate`)} type="date" style={{ ...inputStyle, colorScheme: "dark" }}
+                          <input {...register(`portfolio.${i}.firstDate`)} type="date" style={{ ...inputStyle, colorScheme: "dark" }}
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
                           <label style={labelStyle}>CURRENT VALUATION (USD)</label>
-                          <input {...register(`portfolio.${idx}.valuation`)} style={inputStyle} placeholder="12000000"
+                          <input {...register(`portfolio.${i}.valuation`)} style={inputStyle} placeholder="2000000"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
                         </div>
                         <div>
                           <label style={labelStyle}>ROI %</label>
-                          <input {...register(`portfolio.${idx}.roi`)} style={inputStyle} placeholder="145"
+                          <input {...register(`portfolio.${i}.roi`)} style={inputStyle} placeholder="42"
                             onFocus={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.5)")}
                             onBlur={e => (e.currentTarget.style.borderColor = "rgba(201,168,76,0.18)")}
                           />
