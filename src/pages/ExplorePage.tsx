@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Search, X, Loader2 } from "lucide-react";
+import { Search, X, Loader2, FileText } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import HeroBackground from "@/components/HeroBackground";
 import StatusBadge from "@/components/StatusBadge";
+import StartupFullReportModal from "@/components/StartupFullReportModal";
 import { getIndustries, getShark, getSharks, getStartup, getStartups } from "@/lib/api";
 
 const statuses = ["All", "Active", "IPO", "Acquired", "Dormant", "Shutdown", "Pivoting"];
@@ -75,6 +76,7 @@ const ExplorePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [fullReportStartup, setFullReportStartup] = useState<StartupRecord | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -309,6 +311,37 @@ const ExplorePage = () => {
                         {s.total_funding_usd ? fmtFunding(s.total_funding_usd) : "N/A"}
                       </span>
                     </div>
+                    <button
+                      onClick={e => { e.stopPropagation(); setFullReportStartup(s); }}
+                      style={{
+                        marginTop: 16,
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 7,
+                        padding: "9px 0",
+                        background: "rgba(201,168,76,0.06)",
+                        border: "1px solid rgba(201,168,76,0.2)",
+                        color: "#c9a84c",
+                        fontFamily: "'DM Mono', monospace",
+                        fontSize: 9,
+                        letterSpacing: "0.12em",
+                        cursor: "pointer",
+                        transition: "background 0.2s, border-color 0.2s",
+                      }}
+                      onMouseOver={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(201,168,76,0.14)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,168,76,0.45)";
+                      }}
+                      onMouseOut={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(201,168,76,0.06)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,168,76,0.2)";
+                      }}
+                    >
+                      <FileText size={10} />
+                      VIEW FULL REPORT
+                    </button>
                   </div>
                 ))}
               </div>
@@ -580,6 +613,15 @@ const ExplorePage = () => {
       </div>
 
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+
+      {/* ── Full Report Modal ── */}
+      {fullReportStartup && (
+        <StartupFullReportModal
+          startupId={fullReportStartup.startup_id}
+          startupName={fullReportStartup.startup_name}
+          onClose={() => setFullReportStartup(null)}
+        />
+      )}
     </>
   );
 };
