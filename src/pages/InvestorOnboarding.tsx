@@ -73,6 +73,15 @@ const InvestorOnboarding = () => {
 
     try {
       setSubmitting(true);
+
+      // ✅ FIX: send expertise as array of objects, not flat expertise_domain string
+      const expertisePayload = allData.expertise
+        .filter(e => e.domain?.trim())
+        .map((e, i) => ({
+          domain: e.domain.trim(),
+          is_primary: i === 0 ? 1 : 0,
+        }));
+
       const sharkRes = await createShark({
         first_name: allData.firstName.trim(),
         last_name: nullify(allData.lastName),
@@ -82,8 +91,9 @@ const InvestorOnboarding = () => {
         nationality: nullify(allData.nationality),
         net_worth_usd_millions: allData.netWorth ? parseFloat(allData.netWorth) : null,
         bio: nullify(allData.bio),
-        expertise_domain: nullify(allData.expertise[0]?.domain),
+        expertise: expertisePayload,
       });
+
       const shark_id = sharkRes.data?.shark_id;
       if (!shark_id) throw new Error("Investor creation failed.");
       localStorage.setItem("vaultbridge_investor_shark_id", String(shark_id));
