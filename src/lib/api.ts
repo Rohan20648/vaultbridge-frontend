@@ -8,11 +8,11 @@ const api = axios.create({
 export default api;
 
 // Startups
-export const getStartupFullReport = (id: number) => api.get(`/startups/${id}/full-report`).then(r => r.data);
 export const getStartups = () => api.get("/startups").then(r => r.data);
 export const getStartup = (id: number) => api.get(`/startups/${id}`).then(r => r.data);
 export const setupStartupDbLab = () => api.post("/startups/db-lab/setup").then(r => r.data);
 export const getStartupStatusHistory = (id: number) => api.get(`/startups/${id}/status-history`).then(r => r.data);
+export const getStartupFullReport = (id: number) => api.get(`/startups/${id}/full-report`).then(r => r.data);
 export const getStartupCursorSummary = (id: number) => api.get(`/startups/${id}/cursor-summary`).then(r => r.data);
 export const createStartup = (data: any) => api.post("/startups", data).then(r => r.data);
 export const updateStartup = (id: number, data: any) => api.put(`/startups/${id}`, data).then(r => r.data);
